@@ -18,6 +18,7 @@ DISCOVERY_CACHE_FILE = Path.home() / ".config/steamos-cec-toolkit/cec-devices.js
 CONFIG_FILE = USER_CONFIG_FILE if USER_CONFIG_FILE.exists() else SYSTEM_CONFIG_FILE
 ROOT_HELPER = Path("/var/lib/steamos-cec-toolkit/steamos-cec-volume-raw")
 DEBUG_HELPER = Path("/var/lib/steamos-cec-toolkit/steamos-cec-debug-monitor")
+POWER_STANDBY_HELPER = Path("/var/lib/steamos-cec-toolkit/steamos-cec-power-standby-control")
 SUDOERS_FILE = Path("/etc/sudoers.d/zz-steamos-cec-toolkit-volume")
 EXTERNAL_VOLUME_SCRIPT = Path.home() / ".local/bin/steamos-cec-external-volume"
 VOLUME_SCRIPT = Path.home() / ".local/bin/steamos-cec-volume"
@@ -83,6 +84,10 @@ USER_SERVICES = {
     "steam-button": "steamos-cec-steam-button.service",
     "tv-standby": "steamos-cec-tv-standby-suspend.service",
     "gamescope-recovery": "steamos-cec-gamescope-recovery.service",
+}
+
+SYSTEM_SERVICES = {
+    "power-standby": "steamos-cec-before-sleep.service",
 }
 
 
@@ -159,6 +164,18 @@ def write_user_config(updates: dict[str, str]) -> None:
 def service_state(unit: str) -> dict[str, Any]:
     active = systemctl_user("is-active", unit)
     enabled = systemctl_user("is-enabled", unit)
+    return {
+        "unit": unit,
+        "active": active["stdout"],
+        "enabled": enabled["stdout"],
+        "is_active": active["returncode"] == 0,
+        "is_enabled": enabled["returncode"] == 0,
+    }
+
+
+def system_service_state(unit: str) -> dict[str, Any]:
+    active = run(["systemctl", "is-active", unit])
+    enabled = run(["systemctl", "is-enabled", unit])
     return {
         "unit": unit,
         "active": active["stdout"],
@@ -291,11 +308,15 @@ def status() -> dict[str, Any]:
         "discovery": cached_discovery(),
         "root_helper_exists": ROOT_HELPER.exists(),
         "debug_helper_exists": DEBUG_HELPER.exists(),
+        "power_standby_helper_exists": POWER_STANDBY_HELPER.exists(),
         "sudoers_exists": SUDOERS_FILE.exists(),
         "external_volume_script_exists": EXTERNAL_VOLUME_SCRIPT.exists(),
         "volume_script_exists": VOLUME_SCRIPT.exists(),
         "external_volume": external_volume_state(),
         "services": {name: service_state(unit) for name, unit in USER_SERVICES.items()},
+        "system_services": {
+            name: system_service_state(unit) for name, unit in SYSTEM_SERVICES.items()
+        },
     }
 
 
@@ -308,6 +329,31 @@ def set_service(name: str, enabled: bool) -> dict[str, Any]:
     result = systemctl_user(action, state, unit)
     payload = status()
     payload["action"] = result
+    return payload
+
+
+def set_system_service(name: str, enabled: bool) -> dict[str, Any]:
+    if name != "power-standby":
+        return {"ok": False, "error": f"Unknown system service: {name}"}
+    if not POWER_STANDBY_HELPER.exists():
+        return {
+            "ok": False,
+            "error": "Power standby helper is missing; run the installer/update script first.",
+        }
+    result = run(
+        [
+            "sudo",
+            "-n",
+            str(POWER_STANDBY_HELPER),
+            "on" if enabled else "off",
+        ],
+        timeout=15,
+    )
+    payload = status()
+    payload["action"] = result
+    if not result["ok"]:
+        payload["ok"] = False
+        payload["error"] = result["stdout"] or "System service toggle failed"
     return payload
 
 
@@ -444,6 +490,9 @@ def main() -> int:
     set_service_parser = sub.add_parser("set-service")
     set_service_parser.add_argument("name", choices=sorted(USER_SERVICES))
     set_service_parser.add_argument("state", choices=["on", "off"])
+    set_system_service_parser = sub.add_parser("set-system-service")
+    set_system_service_parser.add_argument("name", choices=sorted(SYSTEM_SERVICES))
+    set_system_service_parser.add_argument("state", choices=["on", "off"])
     external_volume_parser = sub.add_parser("set-external-volume")
     external_volume_parser.add_argument("state", choices=["on", "off"])
     volume_parser = sub.add_parser("volume")
@@ -473,6 +522,8 @@ def main() -> int:
             payload = set_config(updates)
     elif args.command == "set-service":
         payload = set_service(args.name, args.state == "on")
+    elif args.command == "set-system-service":
+        payload = set_system_service(args.name, args.state == "on")
     elif args.command == "set-external-volume":
         payload = set_external_volume(args.state == "on")
     elif args.command == "volume":

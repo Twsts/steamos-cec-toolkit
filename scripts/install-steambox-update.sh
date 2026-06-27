@@ -31,9 +31,26 @@ if [[ -f "$STAGED_BIN_DIR/steamos-cec-debug-monitor" ]]; then
     "$ROOT_HELPER_DIR/steamos-cec-debug-monitor"
 fi
 
+if [[ -f "$STAGED_BIN_DIR/steamos-cec-power-standby-control" ]]; then
+  install -m 0755 "$STAGED_BIN_DIR/steamos-cec-power-standby-control" \
+    "$ROOT_HELPER_DIR/steamos-cec-power-standby-control"
+fi
+
+if [[ -f "$STAGED_BIN_DIR/steamos-cec-before-sleep" ]]; then
+  install -m 0755 "$STAGED_BIN_DIR/steamos-cec-before-sleep" \
+    "$ROOT_HELPER_DIR/steamos-cec-before-sleep"
+fi
+
+if [[ -f "$STAGED_BIN_DIR/steamos-cec-before-sleep.service" ]]; then
+  install -m 0644 "$STAGED_BIN_DIR/steamos-cec-before-sleep.service" \
+    /etc/systemd/system/steamos-cec-before-sleep.service
+  systemctl daemon-reload
+fi
+
 {
   printf '%s ALL=(root) NOPASSWD: %s/steamos-cec-volume-raw *\n' "$DECK_USER" "$ROOT_HELPER_DIR"
   printf '%s ALL=(root) NOPASSWD: %s/steamos-cec-debug-monitor *\n' "$DECK_USER" "$ROOT_HELPER_DIR"
+  printf '%s ALL=(root) NOPASSWD: %s/steamos-cec-power-standby-control *\n' "$DECK_USER" "$ROOT_HELPER_DIR"
 } > "$SUDOERS_FILE"
 chmod 0440 "$SUDOERS_FILE"
 

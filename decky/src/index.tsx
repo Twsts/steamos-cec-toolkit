@@ -29,11 +29,13 @@ type Status = {
   discovery?: Discovery | null;
   root_helper_exists?: boolean;
   debug_helper_exists?: boolean;
+  power_standby_helper_exists?: boolean;
   sudoers_exists?: boolean;
   external_volume_script_exists?: boolean;
   volume_script_exists?: boolean;
   external_volume?: ExternalVolumeState;
   services?: Record<string, ServiceState>;
+  system_services?: Record<string, ServiceState>;
   action?: {
     ok: boolean;
     returncode: number;
@@ -69,6 +71,7 @@ const getStatus = callable<[], Status>("get_status");
 const discoverCec = callable<[], Discovery>("discover_cec");
 const setConfig = callable<[Record<string, string>], Status>("set_config");
 const setService = callable<[string, boolean], Status>("set_service");
+const setSystemService = callable<[string, boolean], Status>("set_system_service");
 const setExternalVolume = callable<[boolean], Status>("set_external_volume");
 const volumeUp = callable<[], Status>("volume_up");
 const volumeDown = callable<[], Status>("volume_down");
@@ -110,6 +113,7 @@ function CapabilityDetails({ status }: { status: Status | null }) {
     <div style={{ fontSize: "12px", opacity: 0.8, lineHeight: 1.35 }}>
       <div>Root helper: {yesNo(status.root_helper_exists)}</div>
       <div>Debug helper: {yesNo(status.debug_helper_exists)}</div>
+      <div>Power standby helper: {yesNo(status.power_standby_helper_exists)}</div>
       <div>Sudoers: {yesNo(status.sudoers_exists)}</div>
       <div>CEC volume buttons: {status.external_volume?.enabled ? "On" : "Off"}</div>
       <div>Relative volume: {status.external_volume?.capabilities_ok ? "OK" : "Inactive"}</div>
@@ -125,6 +129,7 @@ function needsInstallHelp(status: Status | null): boolean {
   return (
     !status.root_helper_exists ||
     !status.debug_helper_exists ||
+    !status.power_standby_helper_exists ||
     !status.sudoers_exists ||
     !status.volume_script_exists ||
     !status.external_volume_script_exists
@@ -144,6 +149,9 @@ function missingItems(status: Status | null): string[] {
   }
   if (!status.debug_helper_exists) {
     items.push("CEC debug helper");
+  }
+  if (!status.power_standby_helper_exists) {
+    items.push("power standby helper");
   }
   if (!status.volume_script_exists) {
     items.push("volume wrapper");
@@ -276,6 +284,7 @@ function Content() {
   const steamButton = status?.services?.["steam-button"];
   const tvStandby = status?.services?.["tv-standby"];
   const gamescopeRecovery = status?.services?.["gamescope-recovery"];
+  const powerStandby = status?.system_services?.["power-standby"];
   const cecVolume = status?.external_volume;
   const installed = !!status?.ok && !!status.root_helper_exists && !!status.volume_script_exists;
   const showInstallHelp = needsInstallHelp(status);
@@ -333,6 +342,15 @@ function Content() {
             checked={!!tvStandby?.is_enabled}
             disabled={busy}
             onChange={(enabled: boolean) => void runAction(() => setService("tv-standby", enabled))}
+          />
+        </PanelSectionRow>
+        <PanelSectionRow>
+          <ToggleField
+            label="SteamOS Sleep Turns Off TV"
+            description="Send HDMI-CEC standby when SteamOS suspends or shuts down"
+            checked={!!powerStandby?.is_enabled}
+            disabled={busy || !status?.power_standby_helper_exists}
+            onChange={(enabled: boolean) => void runAction(() => setSystemService("power-standby", enabled))}
           />
         </PanelSectionRow>
         <PanelSectionRow>

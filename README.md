@@ -138,8 +138,8 @@ can:
 - show ExternalVolume/toolkit status
 - toggle SteamOS CEC volume buttons on/off so you can switch between relative
   `+ / -` control and the normal SteamOS volume bar
-- toggle the user services for Steam-button TV wake, TV standby suspend, and
-  Gamescope recovery
+- toggle the user services for Steam-button TV wake, TV standby suspend,
+  SteamOS sleep/shutdown TV standby, and Gamescope recovery
 - discover CEC devices and choose the volume initiator/audio target from
   dropdowns
 - test TV wake/input selection
@@ -344,7 +344,7 @@ Then it runs:
 systemctl suspend
 ```
 
-## Optional Before-Sleep CEC Standby
+## Optional SteamOS Sleep/Shutdown CEC Standby
 
 Enable with:
 
@@ -353,7 +353,8 @@ Enable with:
 ```
 
 This installs a system service that asks `cecd` to send TV standby before
-SteamOS sleeps.
+SteamOS sleeps or shuts down. The Decky plugin can toggle it after the root
+helper and system unit have been installed.
 
 ## Optional Gamescope Recovery
 
