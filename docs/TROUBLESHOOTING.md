@@ -1,5 +1,33 @@
 # Troubleshooting
 
+## After a SteamOS Update
+
+SteamOS updates can reset system-level pieces that this toolkit depends on:
+
+- `/etc/sudoers.d/zz-steamos-cec-toolkit-volume`
+- `/var/lib/steamos-cec-toolkit/*`
+- `/etc/systemd/system/steamos-cec-before-sleep.service`
+- user service state and WirePlumber behavior
+- Decky Loader installation or plugin loading
+
+The Decky plugin should make this visible in `Status`:
+
+- helper or sudoers entries show `Missing`
+- `CEC volume buttons` is `Off`
+- `Relative volume` is `Inactive`
+- an `Install` section appears and lists missing pieces
+
+Repair by rerunning the latest installer:
+
+```bash
+bash <(curl -fsSL https://github.com/Twsts/steamos-cec-toolkit/releases/latest/download/steamos-cec-toolkit-installer.sh)
+```
+
+Then open the plugin, run `Discover CEC Devices`, and re-enable the features
+you want. User-level runtime config is stored in
+`~/.config/steamos-cec-toolkit/config.conf` and should normally survive OS
+updates.
+
 ## Game Mode Still Shows a Normal Slider
 
 Check that WirePlumber has ExternalVolume enabled:

@@ -109,6 +109,46 @@ Root files:
 /etc/systemd/system/steamos-cec-before-sleep.service
 ```
 
+## SteamOS Updates and Recovery
+
+SteamOS updates can replace or reset parts of the system image. User files in
+`/home/deck` usually survive, but anything under `/etc`, `/var/lib`, systemd
+unit state, WirePlumber behavior, Decky Loader, or SteamOS CEC internals may
+change after an OS update.
+
+Common symptoms after an update:
+
+- Game Mode goes back to the normal volume slider.
+- The `SteamOS CEC` Decky plugin shows `Missing` for a helper or sudoers rule.
+- Feature toggles are present but do not do anything.
+- CEC discovery works, but volume or TV standby actions fail.
+- Decky Loader itself needs to be reinstalled or restarted.
+
+The Decky plugin is the first place to check:
+
+- `Root helper`, `Debug helper`, `Power standby helper`, and `Sudoers` should be
+  `OK`.
+- `CEC volume buttons` should be `On` if you want `+ / -` instead of the normal
+  slider.
+- `Relative volume` should be `OK` when ExternalVolume is active.
+- If the `Install` section appears, it lists what is missing.
+
+The normal repair step is simply to rerun the latest installer:
+
+```bash
+bash <(curl -fsSL https://github.com/Twsts/steamos-cec-toolkit/releases/latest/download/steamos-cec-toolkit-installer.sh)
+```
+
+This refreshes the root helpers, sudoers rule, systemd units, WirePlumber
+override, and Decky plugin. It keeps your runtime choices in:
+
+```text
+~/.config/steamos-cec-toolkit/config.conf
+```
+
+After rerunning the installer, open the plugin, run `Discover CEC Devices`, and
+toggle your preferred features back on if needed.
+
 ## Why Relative Volume Needs a Shim
 
 SteamOS has an official user service:
