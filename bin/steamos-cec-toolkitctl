@@ -14,6 +14,7 @@ from typing import Any
 
 SYSTEM_CONFIG_FILE = Path(os.environ.get("STEAMOS_CEC_CONFIG", "/etc/steamos-cec-toolkit.conf"))
 USER_CONFIG_FILE = Path.home() / ".config/steamos-cec-toolkit/config.conf"
+DISCOVERY_CACHE_FILE = Path.home() / ".config/steamos-cec-toolkit/cec-devices.json"
 CONFIG_FILE = USER_CONFIG_FILE if USER_CONFIG_FILE.exists() else SYSTEM_CONFIG_FILE
 ROOT_HELPER = Path("/var/lib/steamos-cec-toolkit/steamos-cec-volume-raw")
 DEBUG_HELPER = Path("/var/lib/steamos-cec-toolkit/steamos-cec-debug-monitor")
@@ -226,7 +227,7 @@ def discover_cec() -> dict[str, Any]:
         (device for device in devices if device.get("device_type") == "Audio System"),
         None,
     )
-    return {
+    payload = {
         "ok": result["ok"],
         "cec_device": cec_device,
         "devices": devices,
@@ -236,6 +237,18 @@ def discover_cec() -> dict[str, Any]:
         },
         "raw": result["stdout"],
     }
+    if result["ok"]:
+        DISCOVERY_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        DISCOVERY_CACHE_FILE.write_text(json.dumps(payload, separators=(",", ":")), encoding="utf-8")
+    return payload
+
+
+def cached_discovery() -> dict[str, Any] | None:
+    try:
+        payload = json.loads(DISCOVERY_CACHE_FILE.read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError):
+        return None
+    return payload if isinstance(payload, dict) else None
 
 
 def external_volume_state() -> dict[str, Any]:
@@ -275,6 +288,7 @@ def status() -> dict[str, Any]:
         "config_exists": SYSTEM_CONFIG_FILE.exists() or USER_CONFIG_FILE.exists(),
         "user_config_exists": USER_CONFIG_FILE.exists(),
         "config": config,
+        "discovery": cached_discovery(),
         "root_helper_exists": ROOT_HELPER.exists(),
         "debug_helper_exists": DEBUG_HELPER.exists(),
         "sudoers_exists": SUDOERS_FILE.exists(),
@@ -394,6 +408,9 @@ def set_external_volume(enabled: bool) -> dict[str, Any]:
         systemctl_user("stop", "cec-audio-control.socket")
 
     systemctl_user("restart", "wireplumber.service")
+    if not enabled:
+        systemctl_user("restart", "pipewire.service")
+        systemctl_user("restart", "pipewire-pulse.service")
     return status()
 
 

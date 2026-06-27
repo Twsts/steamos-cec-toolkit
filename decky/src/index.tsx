@@ -26,6 +26,7 @@ type Status = {
   error?: string;
   config_exists?: boolean;
   config?: Record<string, string>;
+  discovery?: Discovery | null;
   root_helper_exists?: boolean;
   debug_helper_exists?: boolean;
   sudoers_exists?: boolean;
@@ -264,12 +265,13 @@ function Content() {
   const cecVolume = status?.external_volume;
   const installed = !!status?.ok && !!status.root_helper_exists && !!status.volume_script_exists;
   const showInstallHelp = needsInstallHelp(status);
-  const deviceOptions = (discovery?.devices || []).map((device) => ({
+  const discovered = discovery || status?.discovery || null;
+  const deviceOptions = (discovered?.devices || []).map((device) => ({
     data: device.logical_address,
     label: device.label,
   }));
-  const initiator = configValue(status, "CEC_VOLUME_INITIATOR", discovery?.suggested?.CEC_VOLUME_INITIATOR || "0");
-  const audioTarget = configValue(status, "CEC_AUDIO_LOGICAL_ADDRESS", discovery?.suggested?.CEC_AUDIO_LOGICAL_ADDRESS || "5");
+  const initiator = configValue(status, "CEC_VOLUME_INITIATOR", discovered?.suggested?.CEC_VOLUME_INITIATOR || "0");
+  const audioTarget = configValue(status, "CEC_AUDIO_LOGICAL_ADDRESS", discovered?.suggested?.CEC_AUDIO_LOGICAL_ADDRESS || "5");
 
   return (
     <>
