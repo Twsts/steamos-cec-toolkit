@@ -400,14 +400,16 @@ def set_external_volume(enabled: bool) -> dict[str, Any]:
         systemctl_user("daemon-reload")
         systemctl_user("stop", "cec-audio-control.service")
         systemctl_user("start", "cec-audio-control.socket")
+        systemctl_user("restart", "pipewire.service")
+        systemctl_user("restart", "pipewire-pulse.service")
+        systemctl_user("restart", "wireplumber.service")
+        systemctl_user("start", "cec-audio-control.socket")
     else:
         remove_external_volume_files()
         systemctl_user("daemon-reload")
         systemctl_user("stop", "cec-audio-control.service")
         systemctl_user("stop", "cec-audio-control.socket")
-
-    systemctl_user("restart", "wireplumber.service")
-    if not enabled:
+        systemctl_user("restart", "wireplumber.service")
         systemctl_user("restart", "pipewire.service")
         systemctl_user("restart", "pipewire-pulse.service")
     return status()
