@@ -90,6 +90,10 @@ sudo install -m 0755 "$PROJECT_DIR/bin/steamos-cec-debug-monitor" \
   /var/lib/steamos-cec-toolkit/steamos-cec-debug-monitor
 sudo install -m 0755 "$PROJECT_DIR/bin/steamos-cec-power-standby-control" \
   /var/lib/steamos-cec-toolkit/steamos-cec-power-standby-control
+sudo install -m 0755 "$PROJECT_DIR/bin/steamos-cec-before-sleep" \
+  /var/lib/steamos-cec-toolkit/steamos-cec-before-sleep
+sudo install -D -m 0644 "$PROJECT_DIR/systemd/system/steamos-cec-before-sleep.service" \
+  /etc/systemd/system/steamos-cec-before-sleep.service
 
 sudoers_tmp="$(mktemp)"
 {
@@ -142,13 +146,6 @@ if [[ "$enable_gamescope_recovery" -eq 1 ]]; then
     "$HOME/.config/systemd/user/steamos-cec-gamescope-recovery.service"
 fi
 
-if [[ "$enable_before_sleep" -eq 1 ]]; then
-  sudo install -m 0755 "$PROJECT_DIR/bin/steamos-cec-before-sleep" \
-    /var/lib/steamos-cec-toolkit/steamos-cec-before-sleep
-  sudo install -D -m 0644 "$PROJECT_DIR/systemd/system/steamos-cec-before-sleep.service" \
-    /etc/systemd/system/steamos-cec-before-sleep.service
-fi
-
 systemctl --user daemon-reload
 
 if [[ "$enable_steam_button" -eq 1 ]]; then
@@ -163,6 +160,8 @@ fi
 if [[ "$enable_before_sleep" -eq 1 ]]; then
   sudo systemctl daemon-reload
   sudo systemctl enable steamos-cec-before-sleep.service
+else
+  sudo systemctl daemon-reload
 fi
 
 if [[ "$restart_services" -eq 1 ]]; then

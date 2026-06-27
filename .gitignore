@@ -2,4 +2,5 @@ __pycache__/
 *.py[cod]
 node_modules/
 decky/dist/*.map
+release/
 .DS_Store

@@ -1,9 +1,12 @@
 # SteamOS CEC Toolkit
 
-----
-Disclamer - this is a solution for DIY/self installed SteamOS console/machine. Made with the help of vibe-coding and Codex.
-This is a good working solution on my machine with 9070XT into a UGREEN DP-HDMI adapter giving the OS /dev/cec0 and full CEC support. 
-----
+SteamOS CEC Toolkit is a community project for DIY / self-installed SteamOS
+console builds. It is known to work on a Radeon 9070 XT system using a UGREEN
+DisplayPort-to-HDMI adapter that exposes `/dev/cec0`.
+
+This is not an official Valve project. It was built and tested with Codex
+assistance, and it intentionally uses SteamOS' existing CEC and audio plumbing
+instead of patching Steam.
 
 SteamOS CEC Toolkit is an installable set of scripts and systemd/WirePlumber
 overrides for DIY Steam Machine / HTPC builds that use HDMI-CEC through an
@@ -23,9 +26,51 @@ It was built for a living-room SteamOS box where:
   Gamescope after CEC wake/input switching.
 
 The project uses Valve's existing SteamOS CEC daemon (`cecd`) and PipeWire
-ExternalVolume plumbing. It does not patch Steam.
+ExternalVolume plumbing.
 
 <img width="282" height="673" alt="image" src="https://github.com/user-attachments/assets/d0d05e52-e567-4005-a6ba-bea1e30460e3" />
+
+## Install
+
+Run this on the SteamOS machine as the normal desktop user, usually `deck`:
+
+```bash
+bash <(curl -fsSL https://github.com/Twsts/steamos-cec-toolkit/releases/latest/download/steamos-cec-toolkit-installer.sh)
+```
+
+The installer will:
+
+- download the latest release assets
+- ask which features you want to enable
+- install the CEC volume shim and root helpers
+- install the Decky plugin
+- discover CEC devices where possible
+- restart Decky Loader
+
+After installation, open Game Mode and use the `SteamOS CEC` Decky plugin:
+
+1. Open `Configuration`.
+2. Press `Discover CEC Devices`.
+3. Confirm `Volume Initiator` and `Audio Target`.
+4. Use `Actions` to test wake/input selection and volume.
+5. Toggle the features you want under `Features`.
+
+If the plugin does not appear immediately, restart Steam or reboot.
+
+Development builds can be installed from `main` with:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/Twsts/steamos-cec-toolkit/main/scripts/easy-install.sh)
+```
+
+## Requirements
+
+- SteamOS / Steam Deck-style Game Mode on a DIY HTPC.
+- Decky Loader already installed.
+- A working CEC adapter exposed as `/dev/cec0` or similar.
+- A TV/AVR/soundbar HDMI-CEC chain.
+- `git`, `curl`, `sudo`, `systemctl`, and `unzip` available on the SteamOS
+  desktop session.
 
 ## Hardware This Targets
 
@@ -98,10 +143,14 @@ target:    5  (Audio System)
 
 ## Quick Install
 
+Most users should use the one-command installer above.
+
+Manual install:
+
 Clone the repo on the SteamOS machine as the `deck` user:
 
 ```bash
-git clone https://github.com/YOURNAME/steamos-cec-toolkit.git
+git clone https://github.com/Twsts/steamos-cec-toolkit.git
 cd steamos-cec-toolkit
 ```
 
@@ -123,6 +172,34 @@ Install everything:
 ```
 
 Then restart Steam/Game Mode or reboot.
+
+## Release Assets
+
+Each GitHub release should include:
+
+```text
+steamos-cec-toolkit-installer.sh
+steamos-cec-toolkit-decky.zip
+steamos-cec-toolkit.tar.gz
+SHA256SUMS
+```
+
+Build them from a clean checkout:
+
+```bash
+scripts/build-release-assets.sh v0.1.0
+```
+
+Upload example:
+
+```bash
+gh release create v0.1.0 \
+  release/steamos-cec-toolkit-installer.sh \
+  release/steamos-cec-toolkit-decky.zip \
+  release/steamos-cec-toolkit.tar.gz \
+  release/SHA256SUMS \
+  --title "v0.1.0"
+```
 
 ## Decky Plugin
 
