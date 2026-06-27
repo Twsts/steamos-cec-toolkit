@@ -72,6 +72,11 @@ else
   echo "Keeping existing config at $CONFIG_FILE"
 fi
 
+if grep -qx 'HDMI_ALSA_CARD_NICK=HDA ATI HDMI' "$CONFIG_FILE" 2>/dev/null; then
+  echo "Repairing unquoted HDMI_ALSA_CARD_NICK in $CONFIG_FILE"
+  sudo sed -i 's/^HDMI_ALSA_CARD_NICK=HDA ATI HDMI$/HDMI_ALSA_CARD_NICK="HDA ATI HDMI"/' "$CONFIG_FILE"
+fi
+
 # shellcheck disable=SC1090
 source "$CONFIG_FILE"
 

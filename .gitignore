@@ -3,4 +3,5 @@ __pycache__/
 node_modules/
 decky/dist/*.map
 release/
+assets/screenshots/candidates/
 .DS_Store

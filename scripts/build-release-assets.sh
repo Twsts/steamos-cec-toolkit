@@ -53,6 +53,7 @@ tar \
   --exclude='.git' \
   --exclude='decky/node_modules' \
   --exclude='release' \
+  --exclude='assets/screenshots/candidates' \
   --exclude='*.pyc' \
   --exclude='__pycache__' \
   -C "$PROJECT_DIR/.." \
