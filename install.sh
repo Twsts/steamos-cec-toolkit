@@ -16,7 +16,7 @@ usage() {
 Usage: ./install.sh [options]
 
 Options:
-  --enable-steam-button         Activate this HDMI input when the Steam button is pressed or the controller wakes
+  --enable-steam-button         Wake the TV/AVR and activate this HDMI input from the Steam button/controller wake
   --enable-tv-standby-suspend   Suspend SteamOS when the TV broadcasts HDMI-CEC standby
   --enable-gamescope-recovery   Restart Gamescope after CEC source activation if the display gets stuck
   --enable-before-sleep         Send HDMI-CEC standby before SteamOS sleeps (system service)

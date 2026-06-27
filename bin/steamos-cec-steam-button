@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Use a short Steam Controller Steam-button press to activate this HDMI source."""
+"""Use the Steam button to wake the TV/AVR and activate this HDMI source."""
 
 from __future__ import annotations
 
@@ -129,11 +129,11 @@ def activate_source(reason: str) -> None:
             continue
         time.sleep(0.5)
         if source_is_active():
-            LOG.info("Activated HDMI source (%s, attempt %d)", reason, attempt)
+            LOG.info("Woke display chain and activated HDMI source (%s, attempt %d)", reason, attempt)
             return
         LOG.info("CEC wake attempt %d did not activate this source", attempt)
 
-    LOG.warning("HDMI source did not become active after CEC wake retries")
+    LOG.warning("Display wake/source activation did not complete after CEC retries")
 
 
 def refresh_devices(

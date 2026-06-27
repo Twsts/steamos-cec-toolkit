@@ -1,5 +1,5 @@
 [Unit]
-Description=Activate SteamOS HDMI-CEC source from Steam button
+Description=Wake TV and activate SteamOS HDMI-CEC source from Steam button
 After=cecd.service
 Wants=cecd.service
 

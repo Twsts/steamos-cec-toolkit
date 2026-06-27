@@ -10,12 +10,12 @@ It was built for a living-room SteamOS box where:
   a normal software volume slider.
 - The `+` / `-` buttons should control the real receiver / soundbar volume over
   HDMI-CEC.
-- A Steam Controller Steam-button press should switch the TV/AVR input back to
-  the SteamOS box.
-- Waking or reconnecting the controller should also activate the SteamOS HDMI
-  source.
+- A Steam Controller Steam-button press should wake/power on the TV/AVR over
+  HDMI-CEC and switch the active input back to the SteamOS box.
+- Waking or reconnecting the controller should also wake the display chain and
+  activate the SteamOS HDMI source.
 - Optional helpers can suspend SteamOS when the TV sends standby and recover
-  Gamescope after input switching.
+  Gamescope after CEC wake/input switching.
 
 The project uses Valve's existing SteamOS CEC daemon (`cecd`) and PipeWire
 ExternalVolume plumbing. It does not patch Steam.
@@ -27,7 +27,7 @@ Known-good reference setup:
 - SteamOS / Steam Deck-style Game Mode on a DIY HTPC.
 - UGREEN DisplayPort-to-HDMI adapter with HDMI-CEC support.
 - TV + AVR/soundbar HDMI-CEC chain.
-- Steam Controller for the Steam-button input-switch helper.
+- Steam Controller for the Steam-button TV wake/input-switch helper.
 
 Other adapters and controllers may work, but you should verify the CEC topology
 and controller HID report format first.
@@ -98,7 +98,8 @@ git clone https://github.com/YOURNAME/steamos-cec-toolkit.git
 cd steamos-cec-toolkit
 ```
 
-Install the ExternalVolume integration and the Steam-button input-switch helper:
+Install the ExternalVolume integration and the Steam-button TV wake/input-switch
+helper:
 
 ```bash
 ./install.sh --enable-steam-button
@@ -194,10 +195,11 @@ varlinkctl call \
 
 If the receiver volume moves, the shim is working.
 
-## Steam Button Input Switching
+## Steam Button TV Wake and Input Switching
 
 The `steamos-cec-steam-button` service watches the Steam Controller HID reports.
-It activates the SteamOS HDMI source by calling SteamOS `cecd`:
+It wakes/powers on the TV/AVR chain and activates the SteamOS HDMI source by
+calling SteamOS `cecd`:
 
 ```bash
 busctl --user call \
@@ -211,6 +213,10 @@ It triggers on:
 
 - controller connect/resume
 - a short Steam-button press
+
+On a working CEC topology this is the same behavior users expect from a console:
+press the controller button, the display wakes, the AVR/TV selects the SteamOS
+input, and Game Mode appears.
 
 Default report parsing targets the original Steam Controller:
 

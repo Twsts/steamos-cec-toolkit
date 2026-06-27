@@ -74,10 +74,11 @@ CEC_VOLUME_INITIATOR=0
 CEC_AUDIO_LOGICAL_ADDRESS=5
 ```
 
-## Steam Button Input Switching
+## Steam Button TV Wake and Input Switching
 
-SteamOS `cecd` already knows how to wake/activate this HDMI source. The toolkit
-does not reimplement source activation; it calls:
+SteamOS `cecd` already knows how to wake the HDMI-CEC display chain and activate
+this HDMI source. The toolkit does not reimplement CEC source activation; it
+calls:
 
 ```text
 com.steampowered.CecDaemon1.Daemon1.Wake
@@ -87,6 +88,9 @@ The Steam-button helper only decides when to call it:
 
 - on controller connect/resume
 - after a confirmed short Steam-button press
+
+On typical TV/AVR CEC setups, this wakes or powers on the TV/AVR and switches
+the active input to the SteamOS machine.
 
 The confirmation window prevents accidental activation from long presses and
 startup noise.
