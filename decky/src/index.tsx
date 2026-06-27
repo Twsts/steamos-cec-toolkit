@@ -79,12 +79,11 @@ function CapabilityDetails({ status }: { status: Status | null }) {
 
   return (
     <div style={{ fontSize: "12px", opacity: 0.8, lineHeight: 1.35 }}>
-      <div>Config: {yesNo(status.config_exists)}</div>
       <div>Root helper: {yesNo(status.root_helper_exists)}</div>
       <div>Sudoers: {yesNo(status.sudoers_exists)}</div>
-      <div>ExternalVolume config: {yesNo(status.external_volume?.config_exists)}</div>
       <div>ExternalVolume override: {yesNo(status.external_volume?.override_exists)}</div>
       <div>Relative volume: {yesNo(status.external_volume?.capabilities_ok)}</div>
+      <div>Custom config: {status.config_exists ? "Present" : "Defaults"}</div>
     </div>
   );
 }
@@ -94,11 +93,9 @@ function needsInstallHelp(status: Status | null): boolean {
     return false;
   }
   return (
-    !status.config_exists ||
     !status.root_helper_exists ||
     !status.sudoers_exists ||
     !status.volume_script_exists ||
-    !status.external_volume?.config_exists ||
     !status.external_volume?.override_exists ||
     !status.external_volume?.capabilities_ok
   );

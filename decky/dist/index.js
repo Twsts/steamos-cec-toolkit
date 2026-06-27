@@ -119,17 +119,15 @@ function CapabilityDetails({ status }) {
     if (!status?.ok) {
         return null;
     }
-    return (SP_JSX.jsxs("div", { style: { fontSize: "12px", opacity: 0.8, lineHeight: 1.35 }, children: [SP_JSX.jsxs("div", { children: ["Config: ", yesNo(status.config_exists)] }), SP_JSX.jsxs("div", { children: ["Root helper: ", yesNo(status.root_helper_exists)] }), SP_JSX.jsxs("div", { children: ["Sudoers: ", yesNo(status.sudoers_exists)] }), SP_JSX.jsxs("div", { children: ["ExternalVolume config: ", yesNo(status.external_volume?.config_exists)] }), SP_JSX.jsxs("div", { children: ["ExternalVolume override: ", yesNo(status.external_volume?.override_exists)] }), SP_JSX.jsxs("div", { children: ["Relative volume: ", yesNo(status.external_volume?.capabilities_ok)] })] }));
+    return (SP_JSX.jsxs("div", { style: { fontSize: "12px", opacity: 0.8, lineHeight: 1.35 }, children: [SP_JSX.jsxs("div", { children: ["Root helper: ", yesNo(status.root_helper_exists)] }), SP_JSX.jsxs("div", { children: ["Sudoers: ", yesNo(status.sudoers_exists)] }), SP_JSX.jsxs("div", { children: ["ExternalVolume override: ", yesNo(status.external_volume?.override_exists)] }), SP_JSX.jsxs("div", { children: ["Relative volume: ", yesNo(status.external_volume?.capabilities_ok)] }), SP_JSX.jsxs("div", { children: ["Custom config: ", status.config_exists ? "Present" : "Defaults"] })] }));
 }
 function needsInstallHelp(status) {
     if (!status?.ok) {
         return false;
     }
-    return (!status.config_exists ||
-        !status.root_helper_exists ||
+    return (!status.root_helper_exists ||
         !status.sudoers_exists ||
         !status.volume_script_exists ||
-        !status.external_volume?.config_exists ||
         !status.external_volume?.override_exists ||
         !status.external_volume?.capabilities_ok);
 }
