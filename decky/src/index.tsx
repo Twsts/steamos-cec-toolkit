@@ -74,6 +74,7 @@ const volumeUp = callable<[], Status>("volume_up");
 const volumeDown = callable<[], Status>("volume_down");
 const mute = callable<[], Status>("mute");
 const wakeTv = callable<[], Status>("wake_tv");
+const standbyTv = callable<[], Status>("standby_tv");
 const restartExternalVolume = callable<[], Status>("restart_external_volume");
 const debugCec = callable<[number], Status>("debug_cec");
 
@@ -373,10 +374,15 @@ function Content() {
         </PanelSectionRow>
       </PanelSection>
 
-      <PanelSection title="Test">
+      <PanelSection title="Actions">
         <PanelSectionRow>
           <ButtonItem layout="below" disabled={busy || !installed} onClick={() => void runAction(wakeTv)}>
             Wake TV / Select Input
+          </ButtonItem>
+        </PanelSectionRow>
+        <PanelSectionRow>
+          <ButtonItem layout="below" disabled={busy || !installed} onClick={() => void runAction(standbyTv)}>
+            TV Standby
           </ButtonItem>
         </PanelSectionRow>
         <PanelSectionRow>

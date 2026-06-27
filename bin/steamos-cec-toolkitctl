@@ -347,6 +347,25 @@ def wake_tv() -> dict[str, Any]:
     return payload
 
 
+def standby_tv() -> dict[str, Any]:
+    result = run(
+        [
+            "busctl",
+            "--user",
+            "call",
+            "com.steampowered.CecDaemon1",
+            "/com/steampowered/CecDaemon1/Devices/Cec0",
+            "com.steampowered.CecDaemon1.CecDevice1",
+            "Standby",
+            "y",
+            "0",
+        ]
+    )
+    payload = status()
+    payload["action"] = result
+    return payload
+
+
 def restart_external_volume() -> dict[str, Any]:
     systemctl_user("stop", "cec-audio-control.service")
     systemctl_user("start", "cec-audio-control.socket")
@@ -432,6 +451,7 @@ def main() -> int:
     debug_parser = sub.add_parser("debug-cec")
     debug_parser.add_argument("seconds", nargs="?", default=3, type=int)
     sub.add_parser("wake")
+    sub.add_parser("standby")
     sub.add_parser("restart-external-volume")
     args = parser.parse_args()
 
@@ -461,6 +481,8 @@ def main() -> int:
         payload = debug_cec(args.seconds)
     elif args.command == "wake":
         payload = wake_tv()
+    elif args.command == "standby":
+        payload = standby_tv()
     elif args.command == "restart-external-volume":
         payload = restart_external_volume()
     else:

@@ -92,6 +92,9 @@ class Plugin:
     async def wake_tv(self) -> dict:
         return await self._run_ctl("wake")
 
+    async def standby_tv(self) -> dict:
+        return await self._run_ctl("standby")
+
     async def restart_external_volume(self) -> dict:
         return await self._run_ctl("restart-external-volume")
 
