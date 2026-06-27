@@ -197,8 +197,7 @@ function ConfigDetails({ status }: { status: Status | null }) {
   );
 }
 
-function DebugOutput({ status }: { status: Status | null }) {
-  const output = status?.debug?.stdout?.trim();
+function DebugOutput({ output }: { output: string }) {
   if (!output) {
     return null;
   }
@@ -212,9 +211,11 @@ function DebugOutput({ status }: { status: Status | null }) {
           whiteSpace: "pre-wrap",
           wordBreak: "break-word",
           fontSize: "10px",
-          maxHeight: "260px",
-          overflow: "hidden",
+          lineHeight: 1.25,
+          maxHeight: "180px",
+          overflowY: "auto",
           opacity: 0.85,
+          margin: 0,
         }}
       >
         {lines}
@@ -226,6 +227,7 @@ function DebugOutput({ status }: { status: Status | null }) {
 function Content() {
   const [status, setStatus] = useState<Status | null>(null);
   const [discovery, setDiscovery] = useState<Discovery | null>(null);
+  const [debugOutput, setDebugOutput] = useState("");
   const [busy, setBusy] = useState(false);
 
   const refresh = async () => {
@@ -246,6 +248,17 @@ function Content() {
     setBusy(true);
     try {
       setStatus(await action());
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const captureDebug = async () => {
+    setBusy(true);
+    try {
+      const nextStatus = await debugCec(3);
+      setStatus(nextStatus);
+      setDebugOutput(nextStatus.debug?.stdout?.trim() || nextStatus.error || "No CEC messages captured.");
     } finally {
       setBusy(false);
     }
@@ -292,6 +305,25 @@ function Content() {
       {showInstallHelp && (
         <InstallHelp status={status} />
       )}
+
+      <PanelSection title="Debug">
+        <PanelSectionRow>
+          <ButtonItem layout="below" disabled={busy || !status?.debug_helper_exists} onClick={() => void captureDebug()}>
+            Capture CEC Messages
+          </ButtonItem>
+        </PanelSectionRow>
+        <DebugOutput output={debugOutput} />
+        {debugOutput && (
+          <PanelSectionRow>
+            <ButtonItem layout="below" disabled={busy} onClick={() => setDebugOutput("")}>
+              Clear Capture
+            </ButtonItem>
+          </PanelSectionRow>
+        )}
+        <PanelSectionRow>
+          <ConfigDetails status={status} />
+        </PanelSectionRow>
+      </PanelSection>
 
       <PanelSection title="Features">
         <PanelSectionRow>
@@ -388,17 +420,6 @@ function Content() {
         </PanelSectionRow>
       </PanelSection>
 
-      <PanelSection title="Debug">
-        <PanelSectionRow>
-          <ConfigDetails status={status} />
-        </PanelSectionRow>
-        <PanelSectionRow>
-          <ButtonItem layout="below" disabled={busy || !status?.debug_helper_exists} onClick={() => void runAction(() => debugCec(3))}>
-            Capture CEC Messages
-          </ButtonItem>
-        </PanelSectionRow>
-        <DebugOutput status={status} />
-      </PanelSection>
     </>
   );
 }
