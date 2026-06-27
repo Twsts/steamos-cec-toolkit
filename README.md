@@ -1,5 +1,9 @@
 # SteamOS CEC Toolkit
 
+> Disclaimer: This is a community solution for DIY/self-installed SteamOS
+> machines. It was created with vibe-coding and Codex, and is tested on one
+> known-good HTPC setup.
+
 SteamOS CEC Toolkit is a community project for DIY / self-installed SteamOS
 console builds. It is known to work on a Radeon 9070 XT system using a UGREEN
 DisplayPort-to-HDMI adapter that exposes `/dev/cec0`.
