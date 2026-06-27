@@ -1,20 +1,13 @@
 # SteamOS CEC Toolkit
 
 > Disclaimer: This is a community solution for DIY/self-installed SteamOS
-> machines. It was created with vibe-coding and Codex, and is tested on one
-> known-good HTPC setup.
+> machines, created with vibe-coding and Codex. It is not an official Valve
+> project, and is tested on one known-good HTPC setup: a Radeon 9070 XT system
+> with a UGREEN DisplayPort-to-HDMI CEC adapter exposing `/dev/cec0`.
 
-SteamOS CEC Toolkit is a community project for DIY / self-installed SteamOS
-console builds. It is known to work on a Radeon 9070 XT system using a UGREEN
-DisplayPort-to-HDMI adapter that exposes `/dev/cec0`.
-
-This is not an official Valve project. It was built and tested with Codex
-assistance, and it intentionally uses SteamOS' existing CEC and audio plumbing
-instead of patching Steam.
-
-SteamOS CEC Toolkit is an installable set of scripts and systemd/WirePlumber
-overrides for DIY Steam Machine / HTPC builds that use HDMI-CEC through an
-adapter such as the UGREEN DisplayPort-to-HDMI CEC adapter.
+SteamOS CEC Toolkit is an installable set of scripts, systemd units,
+WirePlumber overrides, and a Decky plugin for DIY Steam Machine / HTPC builds
+that use HDMI-CEC.
 
 It was built for a living-room SteamOS box where:
 
