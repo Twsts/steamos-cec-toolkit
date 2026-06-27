@@ -1,0 +1,233 @@
+#!/usr/bin/env python3
+"""Use a short Steam Controller Steam-button press to activate this HDMI source."""
+
+from __future__ import annotations
+
+import glob
+import logging
+import os
+import selectors
+import subprocess
+import time
+
+
+CEC_BUS = "com.steampowered.CecDaemon1"
+CEC_PATH = "/com/steampowered/CecDaemon1/Daemon"
+CEC_INTERFACE = "com.steampowered.CecDaemon1.Daemon1"
+CEC_DEVICE_PATH = "/com/steampowered/CecDaemon1/Devices/Cec0"
+CEC_DEVICE_INTERFACE = "com.steampowered.CecDaemon1.CecDevice1"
+DEFAULT_CONFIG = "/etc/steamos-cec-toolkit.conf"
+
+BUTTON_DEBOUNCE_SECONDS = 2
+REPORT_RESUME_SECONDS = 3
+STARTUP_BASELINE_SECONDS = 2
+SHORT_PRESS_MAX_SECONDS = 1.5
+SHORT_PRESS_CONFIRM_SECONDS = 1.0
+SHORT_PRESS_CONFIRM_REPORTS = 20
+
+logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+LOG = logging.getLogger("steamos-cec-steam-button")
+
+
+def read_config(path: str = DEFAULT_CONFIG) -> dict[str, str]:
+    config: dict[str, str] = {}
+    try:
+        with open(path, encoding="utf-8") as file:
+            for raw_line in file:
+                line = raw_line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, value = line.split("=", 1)
+                config[key.strip()] = value.strip().strip('"').strip("'")
+    except FileNotFoundError:
+        pass
+    return config
+
+
+CONFIG = read_config(os.environ.get("STEAMOS_CEC_CONFIG", DEFAULT_CONFIG))
+HID_ID = CONFIG.get("STEAM_BUTTON_HID_ID", "0003:000028DE:00001304")
+EXCLUDED_PHYS = CONFIG.get("STEAM_BUTTON_EXCLUDED_PHYS", "input6")
+REPORT_ID = int(CONFIG.get("STEAM_BUTTON_REPORT_ID", "0x45"), 0)
+BUTTON_BYTE = int(CONFIG.get("STEAM_BUTTON_BYTE", "4"), 0)
+BUTTON_MASK = int(CONFIG.get("STEAM_BUTTON_MASK", "0x01"), 0)
+
+
+def hid_properties(path: str) -> dict[str, str]:
+    properties: dict[str, str] = {}
+    device_name = os.path.basename(path)
+    try:
+        with open(
+            f"/sys/class/hidraw/{device_name}/device/uevent",
+            encoding="utf-8",
+        ) as uevent:
+            for line in uevent:
+                key, separator, value = line.strip().partition("=")
+                if separator:
+                    properties[key] = value
+    except OSError:
+        pass
+    return properties
+
+
+def is_controller(path: str) -> bool:
+    properties = hid_properties(path)
+    hid_id = properties.get("HID_ID", "").lower()
+    hid_phys = properties.get("HID_PHYS", "").lower()
+    return HID_ID.lower() in hid_id and EXCLUDED_PHYS.lower() not in hid_phys
+
+
+def cec_wake() -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [
+            "busctl",
+            "--user",
+            "call",
+            CEC_BUS,
+            CEC_PATH,
+            CEC_INTERFACE,
+            "Wake",
+        ],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        timeout=10,
+        check=False,
+    )
+
+
+def source_is_active() -> bool:
+    result = subprocess.run(
+        [
+            "busctl",
+            "--user",
+            "get-property",
+            CEC_BUS,
+            CEC_DEVICE_PATH,
+            CEC_DEVICE_INTERFACE,
+            "Active",
+        ],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        timeout=5,
+        check=False,
+    )
+    return result.returncode == 0 and result.stdout.strip() == "b true"
+
+
+def activate_source(reason: str) -> None:
+    for attempt, delay in enumerate((0, 2, 3), start=1):
+        if delay:
+            time.sleep(delay)
+        result = cec_wake()
+        if result.returncode != 0:
+            LOG.warning(
+                "CEC activation attempt %d failed: %s",
+                attempt,
+                result.stdout.strip(),
+            )
+            continue
+        time.sleep(0.5)
+        if source_is_active():
+            LOG.info("Activated HDMI source (%s, attempt %d)", reason, attempt)
+            return
+        LOG.info("CEC wake attempt %d did not activate this source", attempt)
+
+    LOG.warning("HDMI source did not become active after CEC wake retries")
+
+
+def refresh_devices(
+    selector: selectors.BaseSelector,
+    open_devices: dict[str, int],
+) -> None:
+    current = {path for path in glob.glob("/dev/hidraw*") if is_controller(path)}
+
+    for path in set(open_devices) - current:
+        fd = open_devices.pop(path)
+        try:
+            selector.unregister(fd)
+        except KeyError:
+            pass
+        os.close(fd)
+
+    for path in sorted(current - set(open_devices)):
+        try:
+            fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK)
+            selector.register(fd, selectors.EVENT_READ, path)
+            open_devices[path] = fd
+            LOG.info("Monitoring controller at %s", path)
+        except OSError as error:
+            LOG.warning("Cannot monitor %s: %s", path, error)
+
+
+def main() -> None:
+    selector = selectors.DefaultSelector()
+    open_devices: dict[str, int] = {}
+    startup_deadline = time.monotonic() + STARTUP_BASELINE_SECONDS
+
+    button_down: dict[str, bool] = {}
+    button_pressed_at: dict[str, float] = {}
+    pending_short_press: dict[str, tuple[float, int]] = {}
+    last_activation = 0.0
+    last_report_seen: dict[str, float] = {}
+    report_seen_once: set[str] = set()
+
+    while True:
+        refresh_devices(selector, open_devices)
+
+        for key, _ in selector.select(timeout=5):
+            path = key.data
+            try:
+                data = os.read(key.fileobj, 4096)
+            except (BlockingIOError, OSError):
+                continue
+
+            now = time.monotonic()
+            previous_report = last_report_seen.get(path)
+            first_report = path not in report_seen_once
+            resumed = (
+                previous_report is not None
+                and now - previous_report >= REPORT_RESUME_SECONDS
+            )
+            last_report_seen[path] = now
+
+            pending = pending_short_press.get(path)
+            if pending:
+                released_at, reports_after_release = pending
+                reports_after_release += 1
+                pending_short_press[path] = (released_at, reports_after_release)
+                if (
+                    now - released_at >= SHORT_PRESS_CONFIRM_SECONDS
+                    and reports_after_release >= SHORT_PRESS_CONFIRM_REPORTS
+                    and now - last_activation >= BUTTON_DEBOUNCE_SECONDS
+                ):
+                    last_activation = now
+                    pending_short_press.pop(path, None)
+                    activate_source("short Steam-button press")
+
+            connected = resumed or (first_report and now >= startup_deadline)
+            if connected and now - last_activation >= BUTTON_DEBOUNCE_SECONDS:
+                last_activation = now
+                activate_source("controller connected or resumed")
+
+            report_seen_once.add(path)
+
+            if len(data) <= BUTTON_BYTE or data[0] != REPORT_ID:
+                continue
+
+            is_down = bool(data[BUTTON_BYTE] & BUTTON_MASK)
+            was_down = button_down.get(path, False)
+
+            if is_down and not was_down:
+                button_pressed_at[path] = now
+                pending_short_press.pop(path, None)
+            elif not is_down and was_down:
+                pressed_at = button_pressed_at.pop(path, now)
+                if now - pressed_at <= SHORT_PRESS_MAX_SECONDS:
+                    pending_short_press[path] = (now, 0)
+
+            button_down[path] = is_down
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,13 @@
+[Unit]
+Description=Suspend SteamOS when TV broadcasts HDMI-CEC standby
+After=cecd.service
+Wants=cecd.service
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/steamos-cec-tv-standby-suspend
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target

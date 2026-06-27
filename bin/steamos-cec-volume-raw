@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+CONFIG_FILE="${STEAMOS_CEC_CONFIG:-/etc/steamos-cec-toolkit.conf}"
+if [[ -r "$CONFIG_FILE" ]]; then
+  # shellcheck disable=SC1090
+  source "$CONFIG_FILE"
+fi
+
+CEC_DEVICE="${CEC_DEVICE:-/dev/cec0}"
+CEC_VOLUME_INITIATOR="${CEC_VOLUME_INITIATOR:-0}"
+CEC_AUDIO_LOGICAL_ADDRESS="${CEC_AUDIO_LOGICAL_ADDRESS:-5}"
+CEC_VOLUME_PRESS_SECONDS="${CEC_VOLUME_PRESS_SECONDS:-0.25}"
+
+case "${1:-}" in
+  up) payload="0x41" ;;
+  down) payload="0x42" ;;
+  mute) payload="0x43" ;;
+  *) echo "usage: $0 up|down|mute" >&2; exit 2 ;;
+esac
+
+/usr/bin/cec-ctl -d "$CEC_DEVICE" -s --raw-msg \
+  -f "$CEC_VOLUME_INITIATOR" \
+  -t "$CEC_AUDIO_LOGICAL_ADDRESS" \
+  --custom-command cmd=0x44,payload="$payload"
+
+sleep "$CEC_VOLUME_PRESS_SECONDS"
+
+/usr/bin/cec-ctl -d "$CEC_DEVICE" -s --raw-msg \
+  -f "$CEC_VOLUME_INITIATOR" \
+  -t "$CEC_AUDIO_LOGICAL_ADDRESS" \
+  --custom-command cmd=0x45

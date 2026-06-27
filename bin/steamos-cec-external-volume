@@ -1,0 +1,372 @@
+#!/usr/bin/env python3
+"""PipeWire ExternalVolume Varlink server backed by HDMI-CEC volume commands."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import queue
+import socket
+import subprocess
+import sys
+import threading
+import traceback
+from pathlib import Path
+from typing import Any
+
+
+SOCKET_FD = 3
+DEFAULT_CONFIG = "/etc/steamos-cec-toolkit.conf"
+DEFAULT_VOLUME_CMD = str(Path.home() / ".local/bin/steamos-cec-volume")
+
+EXTERNAL_VOLUME_INTERFACE = """interface org.pipewire.ExternalVolume
+
+method GetCapabilities(
+        device: string
+) -> ()
+
+method ReadVolume(
+        device: string,
+        route: string
+) -> ()
+
+method WriteVolumeAbsolute(
+        device: string,
+        route: string,
+        volume: float
+) -> ()
+
+method WriteVolumeRelative(
+        device: string,
+        route: string,
+        step: float
+) -> ()
+
+method ReadMute(
+        device: string,
+        route: string
+) -> ()
+
+method WriteMuteValue(
+        device: string,
+        route: string,
+        mute: bool
+) -> ()
+
+method WriteMuteToggle(
+        device: string,
+        route: string
+) -> ()
+
+error InvalidDevice()
+
+error InvalidRoute()
+
+error OperationUnsupported()
+"""
+
+SERVICE_INTERFACE = """interface org.varlink.service
+
+method GetInfo() -> (
+        vendor: string,
+        product: string,
+        version: string,
+        url: string,
+        interfaces: []string
+)
+
+method GetInterfaceDescription(
+        interface: string
+) -> (
+        description: string
+)
+
+error InterfaceNotFound()
+error MethodNotFound()
+error MethodNotImplemented()
+error InvalidParameter()
+error PermissionDenied()
+error ExpectedMore()
+"""
+
+
+def read_config(path: str) -> dict[str, str]:
+    config: dict[str, str] = {}
+    try:
+        with open(path, encoding="utf-8") as file:
+            for raw_line in file:
+                line = raw_line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, value = line.split("=", 1)
+                config[key.strip()] = value.strip().strip('"').strip("'")
+    except FileNotFoundError:
+        pass
+    return config
+
+
+def log(message: str) -> None:
+    print(message, file=sys.stderr, flush=True)
+
+
+class ClientGone(Exception):
+    """Raised when a client disconnects before the reply is written."""
+
+
+def send_reply(conn: socket.socket, obj: dict[str, Any]) -> None:
+    data = json.dumps(obj, separators=(",", ":")).encode("utf-8") + b"\0"
+    try:
+        conn.sendall(data)
+    except (BrokenPipeError, ConnectionResetError, OSError) as error:
+        raise ClientGone(str(error)) from error
+
+
+def send_error(
+    conn: socket.socket,
+    name: str,
+    parameters: dict[str, Any] | None = None,
+) -> None:
+    send_reply(conn, {"error": name, "parameters": parameters or {}})
+
+
+class VolumeWorker:
+    def __init__(self, command: str) -> None:
+        self.command = command
+        self.actions: queue.Queue[str] = queue.Queue()
+        self.thread = threading.Thread(target=self._run, daemon=True)
+        self.thread.start()
+
+    def enqueue(self, action: str) -> None:
+        self.actions.put(action)
+
+    def _run(self) -> None:
+        while True:
+            action = self.actions.get()
+            try:
+                log(f"CEC volume action: {action}")
+                result = subprocess.run(
+                    [self.command, action],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    timeout=8,
+                    check=False,
+                )
+                if result.returncode != 0:
+                    log(
+                        "CEC volume command failed "
+                        f"({result.returncode}): {result.stdout.strip()}"
+                    )
+            except Exception:
+                traceback.print_exc(file=sys.stderr)
+            finally:
+                self.actions.task_done()
+
+
+def service_info() -> dict[str, Any]:
+    return {
+        "parameters": {
+            "vendor": "SteamOS CEC Toolkit",
+            "product": "steamos-cec-external-volume",
+            "version": "0.1.0",
+            "url": "https://github.com/",
+            "interfaces": [
+                "org.varlink.service",
+                "org.pipewire.ExternalVolume",
+            ],
+        }
+    }
+
+
+def capabilities(route: str) -> dict[str, Any]:
+    return {
+        "parameters": {
+            "readVolume": False,
+            "readBalance": False,
+            "volumeRange": {
+                "min": 0.0,
+                "max": 100.0,
+                "step": 1.0,
+            },
+            "writeVolumeAbsolute": False,
+            "writeVolumeRelative": True,
+            "writeVolumeRelativeStep": {
+                "min": 1.0,
+                "max": 1.0,
+            },
+            "writeBalance": False,
+            "readMute": False,
+            "writeMuteValue": False,
+            "writeMuteToggle": True,
+            "routes": [route],
+        }
+    }
+
+
+class Server:
+    def __init__(self, worker: VolumeWorker, route: str) -> None:
+        self.worker = worker
+        self.route = route
+
+    def handle_call(self, conn: socket.socket, msg: dict[str, Any]) -> None:
+        method = msg.get("method")
+        params = msg.get("parameters") or {}
+
+        log(f"varlink call: {method} {params}")
+
+        if method == "org.varlink.service.GetInfo":
+            send_reply(conn, service_info())
+            return
+
+        if method == "org.varlink.service.GetInterfaceDescription":
+            iface = params.get("interface")
+            if iface == "org.pipewire.ExternalVolume":
+                send_reply(conn, {"parameters": {"description": EXTERNAL_VOLUME_INTERFACE}})
+            elif iface == "org.varlink.service":
+                send_reply(conn, {"parameters": {"description": SERVICE_INTERFACE}})
+            else:
+                send_error(conn, "org.varlink.service.InterfaceNotFound")
+            return
+
+        if method == "org.pipewire.ExternalVolume.GetCapabilities":
+            send_reply(conn, capabilities(self.route))
+            return
+
+        if method == "org.pipewire.ExternalVolume.ReadVolume":
+            send_error(conn, "org.pipewire.ExternalVolume.OperationUnsupported")
+            return
+
+        if method == "org.pipewire.ExternalVolume.WriteVolumeAbsolute":
+            send_error(conn, "org.pipewire.ExternalVolume.OperationUnsupported")
+            return
+
+        if method == "org.pipewire.ExternalVolume.WriteVolumeRelative":
+            try:
+                step = float(params.get("step", 0.0))
+            except (TypeError, ValueError):
+                send_error(conn, "org.varlink.service.InvalidParameter")
+                return
+
+            if step > 0:
+                self.worker.enqueue("up")
+            elif step < 0:
+                self.worker.enqueue("down")
+            send_reply(conn, {"parameters": {}})
+            return
+
+        if method == "org.pipewire.ExternalVolume.ReadMute":
+            send_error(conn, "org.pipewire.ExternalVolume.OperationUnsupported")
+            return
+
+        if method == "org.pipewire.ExternalVolume.WriteMuteValue":
+            self.worker.enqueue("mute")
+            send_reply(conn, {"parameters": {}})
+            return
+
+        if method == "org.pipewire.ExternalVolume.WriteMuteToggle":
+            self.worker.enqueue("mute")
+            send_reply(conn, {"parameters": {}})
+            return
+
+        send_error(conn, "org.varlink.service.MethodNotFound")
+
+
+def serve_connection(conn: socket.socket, server: Server) -> None:
+    with conn:
+        buffer = b""
+        while True:
+            try:
+                chunk = conn.recv(4096)
+            except (ConnectionResetError, OSError):
+                return
+            if not chunk:
+                return
+
+            buffer += chunk
+            while b"\0" in buffer:
+                raw, buffer = buffer.split(b"\0", 1)
+                if not raw:
+                    continue
+                try:
+                    message = json.loads(raw.decode("utf-8"))
+                    server.handle_call(conn, message)
+                except ClientGone:
+                    return
+                except Exception:
+                    traceback.print_exc(file=sys.stderr)
+                    try:
+                        send_error(conn, "org.varlink.service.InvalidParameter")
+                    except ClientGone:
+                        return
+
+
+def activated_socket() -> socket.socket:
+    if int(os.environ.get("LISTEN_FDS", "0")) < 1:
+        raise RuntimeError("expected systemd socket activation on fd 3")
+    sock = socket.socket(fileno=SOCKET_FD)
+    sock.setblocking(True)
+    return sock
+
+
+def listen_socket(path: str) -> socket.socket:
+    try:
+        os.unlink(path)
+    except FileNotFoundError:
+        pass
+
+    sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    sock.bind(path)
+    sock.listen()
+    return sock
+
+
+def serve(sock: socket.socket, server: Server) -> None:
+    while True:
+        try:
+            conn, _ = sock.accept()
+        except OSError:
+            return
+        thread = threading.Thread(
+            target=serve_connection,
+            args=(conn, server),
+            daemon=True,
+        )
+        thread.start()
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--config", default=os.environ.get("STEAMOS_CEC_CONFIG", DEFAULT_CONFIG))
+    parser.add_argument("--listen", help="bind a UNIX socket path instead of using systemd fd 3")
+    parser.add_argument("--volume-cmd")
+    return parser.parse_args()
+
+
+def main() -> int:
+    args = parse_args()
+    config = read_config(args.config)
+    volume_cmd = args.volume_cmd or config.get("EXTERNAL_VOLUME_COMMAND", DEFAULT_VOLUME_CMD)
+    route = config.get("EXTERNAL_VOLUME_ROUTE", "hdmi-output-0")
+
+    worker = VolumeWorker(volume_cmd)
+    server = Server(worker, route)
+
+    try:
+        if args.listen:
+            sock = listen_socket(args.listen)
+            log(f"SteamOS CEC ExternalVolume listening at {args.listen}")
+        else:
+            sock = activated_socket()
+            log("SteamOS CEC ExternalVolume started on systemd socket fd 3")
+    except Exception as error:
+        log(str(error))
+        return 1
+
+    with sock:
+        serve(sock, server)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

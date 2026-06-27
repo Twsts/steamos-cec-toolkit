@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+CONFIG_FILE="${STEAMOS_CEC_CONFIG:-/etc/steamos-cec-toolkit.conf}"
+if [[ -r "$CONFIG_FILE" ]]; then
+  # shellcheck disable=SC1090
+  source "$CONFIG_FILE"
+fi
+
+STEAMOS_CEC_USER="${STEAMOS_CEC_USER:-deck}"
+STEAMOS_CEC_UID="$(id -u "$STEAMOS_CEC_USER")"
+
+touch /run/steamos-cec-local-suspend
+
+runuser -u "$STEAMOS_CEC_USER" -- env \
+  XDG_RUNTIME_DIR="/run/user/$STEAMOS_CEC_UID" \
+  DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$STEAMOS_CEC_UID/bus" \
+  busctl --user call \
+    com.steampowered.CecDaemon1 \
+    /com/steampowered/CecDaemon1/Devices/Cec0 \
+    com.steampowered.CecDaemon1.CecDevice1 \
+    Standby y 0 \
+  || true
+
+sleep 1

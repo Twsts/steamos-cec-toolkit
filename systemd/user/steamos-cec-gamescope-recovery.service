@@ -1,0 +1,13 @@
+[Unit]
+Description=Recover Gamescope after HDMI-CEC source activation
+After=cecd.service gamescope-session.target
+Wants=cecd.service
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/steamos-cec-gamescope-recovery
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target

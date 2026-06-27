@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+exec sudo -n /var/lib/steamos-cec-toolkit/steamos-cec-volume-raw "$@"

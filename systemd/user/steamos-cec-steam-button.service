@@ -1,0 +1,13 @@
+[Unit]
+Description=Activate SteamOS HDMI-CEC source from Steam button
+After=cecd.service
+Wants=cecd.service
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/steamos-cec-steam-button
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target

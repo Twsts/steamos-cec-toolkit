@@ -1,0 +1,41 @@
+# SteamOS CEC Toolkit: enable PipeWire ExternalVolume for HDMI CEC.
+
+context.properties = {
+  support.varlink = true
+}
+
+monitor.alsa.rules = [
+  {
+    matches = [
+      {
+        device.name = "@HDMI_ALSA_CARD_NAME@"
+        device.nick = "@HDMI_ALSA_CARD_NICK@"
+      }
+    ]
+    actions = {
+      update-props = {
+        device.description = "HDMI / DisplayPort"
+        api.acp.disable-pro-audio = true
+        device.routes.default-sink-volume = 1.0
+        api.alsa.external-volume-control = "unix:/run/user/1000/cec-audio-control/org.pipewire.ExternalVolume"
+        steamos.supports-hdmi-cec = true
+      }
+    }
+  },
+  {
+    matches = [
+      {
+        node.name = "~alsa_output.pci-.*hdmi.*"
+      }
+    ]
+    actions = {
+      update-props = {
+        session.suspend-timeout-seconds = 3600
+      }
+    }
+  }
+]
+
+wireplumber.settings {
+  monitor.alsa.enable-external-volume-control = true
+}

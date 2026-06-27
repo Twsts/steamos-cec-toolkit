@@ -1,0 +1,11 @@
+[Unit]
+Description=Send HDMI-CEC standby before SteamOS sleeps
+Before=sleep.target
+StopWhenUnneeded=yes
+
+[Service]
+Type=oneshot
+ExecStart=/var/lib/steamos-cec-toolkit/steamos-cec-before-sleep
+
+[Install]
+WantedBy=sleep.target
