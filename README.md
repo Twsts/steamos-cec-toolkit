@@ -305,8 +305,9 @@ Also remove `/etc/steamos-cec-toolkit.conf`:
 
 ## SteamOS Updates
 
-The important user files live under `/home/deck`, and the helper lives under
-`/var/lib/steamos-cec-toolkit`. These normally survive SteamOS updates.
+The important user files live under the SteamOS desktop user's `$HOME`, and the
+helper lives under `/var/lib/steamos-cec-toolkit`. These normally survive
+SteamOS updates.
 
 The sudoers file is under `/etc/sudoers.d`, which is an overlay on SteamOS and
 usually survives normal updates. A factory reset, reimage, or major platform
