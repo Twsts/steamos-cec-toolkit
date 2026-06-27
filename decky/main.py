@@ -71,6 +71,9 @@ class Plugin:
     async def set_service(self, name: str, enabled: bool) -> dict:
         return await self._run_ctl("set-service", name, "on" if enabled else "off")
 
+    async def set_external_volume(self, enabled: bool) -> dict:
+        return await self._run_ctl("set-external-volume", "on" if enabled else "off")
+
     async def volume_up(self) -> dict:
         return await self._run_ctl("volume", "up")
 

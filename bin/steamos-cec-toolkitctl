@@ -20,10 +20,59 @@ WIREPLUMBER_CONFIG = (
     Path.home()
     / ".config/wireplumber/wireplumber.conf.d/99-steamos-cec-external-volume.conf"
 )
+WIREPLUMBER_CONFIG_ALIASES = (
+    Path.home() / ".config/wireplumber/wireplumber.conf.d/99-cec-external-volume.conf",
+)
 CEC_SERVICE_OVERRIDE = (
     Path.home()
     / ".config/systemd/user/cec-audio-control.service.d/override.conf"
 )
+CEC_SERVICE_OVERRIDE_CONTENT = """[Service]
+ExecStart=
+ExecStart=%h/.local/bin/steamos-cec-external-volume
+"""
+WIREPLUMBER_CONFIG_TEMPLATE = """# SteamOS CEC Toolkit: enable PipeWire ExternalVolume for HDMI CEC.
+
+context.properties = {
+  support.varlink = true
+}
+
+monitor.alsa.rules = [
+  {
+    matches = [
+      {
+        device.name = "{hdmi_alsa_card_name}"
+        device.nick = "{hdmi_alsa_card_nick}"
+      }
+    ]
+    actions = {
+      update-props = {
+        device.description = "HDMI / DisplayPort"
+        api.acp.disable-pro-audio = true
+        device.routes.default-sink-volume = 1.0
+        api.alsa.external-volume-control = "unix:/run/user/1000/cec-audio-control/org.pipewire.ExternalVolume"
+        steamos.supports-hdmi-cec = true
+      }
+    }
+  },
+  {
+    matches = [
+      {
+        node.name = "~alsa_output.pci-.*hdmi.*"
+      }
+    ]
+    actions = {
+      update-props = {
+        session.suspend-timeout-seconds = 3600
+      }
+    }
+  }
+]
+
+wireplumber.settings {
+  monitor.alsa.enable-external-volume-control = true
+}
+"""
 
 USER_SERVICES = {
     "steam-button": "steamos-cec-steam-button.service",
@@ -85,6 +134,9 @@ def service_state(unit: str) -> dict[str, Any]:
 def external_volume_state() -> dict[str, Any]:
     service = service_state("cec-audio-control.service")
     socket = service_state("cec-audio-control.socket")
+    config_exists = WIREPLUMBER_CONFIG.exists() or any(
+        path.exists() for path in WIREPLUMBER_CONFIG_ALIASES
+    )
     capabilities = run(
         [
             "varlinkctl",
@@ -95,8 +147,9 @@ def external_volume_state() -> dict[str, Any]:
         ]
     )
     return {
-        "config_exists": WIREPLUMBER_CONFIG.exists(),
+        "config_exists": config_exists,
         "override_exists": CEC_SERVICE_OVERRIDE.exists(),
+        "enabled": config_exists and CEC_SERVICE_OVERRIDE.exists(),
         "service": service,
         "socket": socket,
         "capabilities_ok": capabilities["ok"]
@@ -165,6 +218,48 @@ def restart_external_volume() -> dict[str, Any]:
     return status()
 
 
+def write_external_volume_files() -> None:
+    config = read_config()
+    hdmi_alsa_card_name = config.get("HDMI_ALSA_CARD_NAME", "alsa_card.pci-0000_03_00.1")
+    hdmi_alsa_card_nick = config.get("HDMI_ALSA_CARD_NICK", "HDA ATI HDMI")
+
+    CEC_SERVICE_OVERRIDE.parent.mkdir(parents=True, exist_ok=True)
+    CEC_SERVICE_OVERRIDE.write_text(CEC_SERVICE_OVERRIDE_CONTENT, encoding="utf-8")
+
+    WIREPLUMBER_CONFIG.parent.mkdir(parents=True, exist_ok=True)
+    WIREPLUMBER_CONFIG.write_text(
+        WIREPLUMBER_CONFIG_TEMPLATE.format(
+            hdmi_alsa_card_name=hdmi_alsa_card_name,
+            hdmi_alsa_card_nick=hdmi_alsa_card_nick,
+        ),
+        encoding="utf-8",
+    )
+
+
+def remove_external_volume_files() -> None:
+    for path in (WIREPLUMBER_CONFIG, *WIREPLUMBER_CONFIG_ALIASES, CEC_SERVICE_OVERRIDE):
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            pass
+
+
+def set_external_volume(enabled: bool) -> dict[str, Any]:
+    if enabled:
+        write_external_volume_files()
+        systemctl_user("daemon-reload")
+        systemctl_user("stop", "cec-audio-control.service")
+        systemctl_user("start", "cec-audio-control.socket")
+    else:
+        remove_external_volume_files()
+        systemctl_user("daemon-reload")
+        systemctl_user("stop", "cec-audio-control.service")
+        systemctl_user("stop", "cec-audio-control.socket")
+
+    systemctl_user("restart", "wireplumber.service")
+    return status()
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     sub = parser.add_subparsers(dest="command", required=True)
@@ -172,6 +267,8 @@ def main() -> int:
     set_service_parser = sub.add_parser("set-service")
     set_service_parser.add_argument("name", choices=sorted(USER_SERVICES))
     set_service_parser.add_argument("state", choices=["on", "off"])
+    external_volume_parser = sub.add_parser("set-external-volume")
+    external_volume_parser.add_argument("state", choices=["on", "off"])
     volume_parser = sub.add_parser("volume")
     volume_parser.add_argument("action", choices=["up", "down", "mute"])
     sub.add_parser("wake")
@@ -182,6 +279,8 @@ def main() -> int:
         payload = status()
     elif args.command == "set-service":
         payload = set_service(args.name, args.state == "on")
+    elif args.command == "set-external-volume":
+        payload = set_external_volume(args.state == "on")
     elif args.command == "volume":
         payload = test_volume(args.action)
     elif args.command == "wake":

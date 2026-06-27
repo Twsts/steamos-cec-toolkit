@@ -136,6 +136,8 @@ The plugin is a Game Mode control panel for an already bootstrapped toolkit. It
 can:
 
 - show ExternalVolume/toolkit status
+- toggle SteamOS CEC volume buttons on/off so you can switch between relative
+  `+ / -` control and the normal SteamOS volume bar
 - toggle the user services for Steam-button TV wake, TV standby suspend, and
   Gamescope recovery
 - test TV wake/input selection

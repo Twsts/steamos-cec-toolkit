@@ -14,6 +14,7 @@ type ServiceState = {
 type ExternalVolumeState = {
   config_exists: boolean;
   override_exists: boolean;
+  enabled: boolean;
   capabilities_ok: boolean;
   capabilities: string;
   service: ServiceState;
@@ -39,6 +40,7 @@ type Status = {
 
 const getStatus = callable<[], Status>("get_status");
 const setService = callable<[string, boolean], Status>("set_service");
+const setExternalVolume = callable<[boolean], Status>("set_external_volume");
 const volumeUp = callable<[], Status>("volume_up");
 const volumeDown = callable<[], Status>("volume_down");
 const mute = callable<[], Status>("mute");
@@ -47,13 +49,6 @@ const restartExternalVolume = callable<[], Status>("restart_external_volume");
 
 function yesNo(value: boolean | undefined): string {
   return value ? "OK" : "Missing";
-}
-
-function serviceLine(service?: ServiceState): string {
-  if (!service) {
-    return "Unknown";
-  }
-  return `${service.enabled || "unknown"}, ${service.active || "unknown"}`;
 }
 
 function overallLine(status: Status | null): string {
@@ -65,6 +60,9 @@ function overallLine(status: Status | null): string {
   }
   if (!status.root_helper_exists || !status.sudoers_exists) {
     return "Bootstrap incomplete: root helper or sudoers rule is missing.";
+  }
+  if (!status.external_volume?.enabled) {
+    return "CEC volume buttons are off; SteamOS should use the normal volume bar.";
   }
   if (!status.external_volume?.capabilities_ok) {
     return "ExternalVolume is installed but relative volume capabilities are not active.";
@@ -81,8 +79,8 @@ function CapabilityDetails({ status }: { status: Status | null }) {
     <div style={{ fontSize: "12px", opacity: 0.8, lineHeight: 1.35 }}>
       <div>Root helper: {yesNo(status.root_helper_exists)}</div>
       <div>Sudoers: {yesNo(status.sudoers_exists)}</div>
-      <div>ExternalVolume override: {yesNo(status.external_volume?.override_exists)}</div>
-      <div>Relative volume: {yesNo(status.external_volume?.capabilities_ok)}</div>
+      <div>CEC volume buttons: {status.external_volume?.enabled ? "On" : "Off"}</div>
+      <div>Relative volume: {status.external_volume?.capabilities_ok ? "OK" : "Inactive"}</div>
       <div>Custom config: {status.config_exists ? "Present" : "Defaults"}</div>
     </div>
   );
@@ -96,8 +94,45 @@ function needsInstallHelp(status: Status | null): boolean {
     !status.root_helper_exists ||
     !status.sudoers_exists ||
     !status.volume_script_exists ||
-    !status.external_volume?.override_exists ||
-    !status.external_volume?.capabilities_ok
+    !status.external_volume_script_exists
+  );
+}
+
+function missingItems(status: Status | null): string[] {
+  if (!status?.ok) {
+    return [];
+  }
+  const items: string[] = [];
+  if (!status.root_helper_exists) {
+    items.push("root CEC helper");
+  }
+  if (!status.sudoers_exists) {
+    items.push("sudoers rule");
+  }
+  if (!status.volume_script_exists) {
+    items.push("volume wrapper");
+  }
+  if (!status.external_volume_script_exists) {
+    items.push("ExternalVolume shim");
+  }
+  return items;
+}
+
+function InstallHelp({ status }: { status: Status | null }) {
+  const items = missingItems(status);
+  const command = "git clone https://github.com/Twsts/steamos-cec-toolkit.git && cd steamos-cec-toolkit && ./install.sh --enable-steam-button";
+
+  return (
+    <PanelSection title="Install">
+      <PanelSectionRow>
+        <div style={{ fontSize: "12px", opacity: 0.8, lineHeight: 1.35 }}>
+          <div>Missing: {items.length ? items.join(", ") : "toolkit bootstrap"}</div>
+          <div style={{ marginTop: "6px" }}>Run from Desktop/SSH:</div>
+          <code style={{ display: "block", whiteSpace: "normal", marginTop: "4px" }}>{command}</code>
+          <div style={{ marginTop: "6px" }}>Use README options to enable TV standby or Gamescope recovery.</div>
+        </div>
+      </PanelSectionRow>
+    </PanelSection>
   );
 }
 
@@ -129,6 +164,7 @@ function Content() {
   const steamButton = status?.services?.["steam-button"];
   const tvStandby = status?.services?.["tv-standby"];
   const gamescopeRecovery = status?.services?.["gamescope-recovery"];
+  const cecVolume = status?.external_volume;
   const installed = !!status?.ok && !!status.root_helper_exists && !!status.volume_script_exists;
   const showInstallHelp = needsInstallHelp(status);
 
@@ -149,21 +185,23 @@ function Content() {
       </PanelSection>
 
       {showInstallHelp && (
-        <PanelSection title="Install">
-          <PanelSectionRow>
-            <div style={{ fontSize: "12px", opacity: 0.8, lineHeight: 1.35 }}>
-              Install or update the toolkit from Desktop/SSH first. This plugin intentionally does not write sudoers or
-              root-owned system files.
-            </div>
-          </PanelSectionRow>
-        </PanelSection>
+        <InstallHelp status={status} />
       )}
 
       <PanelSection title="Features">
         <PanelSectionRow>
           <ToggleField
+            label="CEC Volume Buttons"
+            description={cecVolume?.enabled ? "SteamOS shows + / - and sends volume over CEC" : "SteamOS uses the normal volume bar"}
+            checked={!!cecVolume?.enabled}
+            disabled={busy || !installed}
+            onChange={(enabled: boolean) => void runAction(() => setExternalVolume(enabled))}
+          />
+        </PanelSectionRow>
+        <PanelSectionRow>
+          <ToggleField
             label="Steam Button Wakes TV"
-            description={serviceLine(steamButton)}
+            description="Wake the TV/AVR and select this HDMI input when the Steam button wakes SteamOS"
             checked={!!steamButton?.is_enabled}
             disabled={busy}
             onChange={(enabled: boolean) => void runAction(() => setService("steam-button", enabled))}
@@ -172,7 +210,7 @@ function Content() {
         <PanelSectionRow>
           <ToggleField
             label="TV Standby Suspends SteamOS"
-            description={serviceLine(tvStandby)}
+            description="Suspend SteamOS when the TV sends HDMI-CEC standby"
             checked={!!tvStandby?.is_enabled}
             disabled={busy}
             onChange={(enabled: boolean) => void runAction(() => setService("tv-standby", enabled))}
@@ -181,7 +219,7 @@ function Content() {
         <PanelSectionRow>
           <ToggleField
             label="Gamescope Recovery"
-            description={serviceLine(gamescopeRecovery)}
+            description="Restart Gamescope after input activation if the display gets stuck"
             checked={!!gamescopeRecovery?.is_enabled}
             disabled={busy}
             onChange={(enabled: boolean) => void runAction(() => setService("gamescope-recovery", enabled))}
