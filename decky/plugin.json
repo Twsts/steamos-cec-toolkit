@@ -1,0 +1,15 @@
+{
+  "name": "SteamOS CEC Toolkit",
+  "author": "SteamOS CEC Toolkit contributors",
+  "api_version": 1,
+  "flags": [],
+  "publish": {
+    "tags": [
+      "cec",
+      "audio",
+      "utility",
+      "steam-machine"
+    ],
+    "description": "Control a SteamOS HDMI-CEC toolkit for receiver volume, TV wake, and input switching."
+  }
+}

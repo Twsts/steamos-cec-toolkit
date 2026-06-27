@@ -3,6 +3,10 @@
 ## Components
 
 ```text
+Decky plugin (optional)
+  -> steamos-cec-toolkitctl
+  -> systemd --user / Varlink / CEC test commands
+
 SteamOS Game Mode
   -> PipeWire / WirePlumber HDMI ALSA card
   -> org.pipewire.ExternalVolume Varlink socket
@@ -12,6 +16,9 @@ SteamOS Game Mode
   -> cec-ctl --raw-msg -f 0 -t 5
   -> AVR / soundbar
 ```
+
+The Decky plugin is a control panel for an already installed toolkit. It does
+not install sudoers rules or root-owned helpers.
 
 ## ExternalVolume
 

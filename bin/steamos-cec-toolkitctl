@@ -1,0 +1,199 @@
+#!/usr/bin/env python3
+"""Control/status helper for SteamOS CEC Toolkit and Decky UI."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import subprocess
+from pathlib import Path
+from typing import Any
+
+
+CONFIG_FILE = Path(os.environ.get("STEAMOS_CEC_CONFIG", "/etc/steamos-cec-toolkit.conf"))
+ROOT_HELPER = Path("/var/lib/steamos-cec-toolkit/steamos-cec-volume-raw")
+SUDOERS_FILE = Path("/etc/sudoers.d/zz-steamos-cec-toolkit-volume")
+EXTERNAL_VOLUME_SCRIPT = Path.home() / ".local/bin/steamos-cec-external-volume"
+VOLUME_SCRIPT = Path.home() / ".local/bin/steamos-cec-volume"
+WIREPLUMBER_CONFIG = (
+    Path.home()
+    / ".config/wireplumber/wireplumber.conf.d/99-steamos-cec-external-volume.conf"
+)
+CEC_SERVICE_OVERRIDE = (
+    Path.home()
+    / ".config/systemd/user/cec-audio-control.service.d/override.conf"
+)
+
+USER_SERVICES = {
+    "steam-button": "steamos-cec-steam-button.service",
+    "tv-standby": "steamos-cec-tv-standby-suspend.service",
+    "gamescope-recovery": "steamos-cec-gamescope-recovery.service",
+}
+
+
+def run(command: list[str], timeout: int = 8) -> dict[str, Any]:
+    try:
+        process = subprocess.run(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            timeout=timeout,
+            check=False,
+        )
+        return {
+            "returncode": process.returncode,
+            "stdout": process.stdout.strip(),
+            "ok": process.returncode == 0,
+        }
+    except Exception as error:
+        return {"returncode": -1, "stdout": str(error), "ok": False}
+
+
+def systemctl_user(*args: str) -> dict[str, Any]:
+    return run(["systemctl", "--user", *args])
+
+
+def read_config() -> dict[str, str]:
+    values: dict[str, str] = {}
+    try:
+        with CONFIG_FILE.open(encoding="utf-8") as file:
+            for raw_line in file:
+                line = raw_line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, value = line.split("=", 1)
+                values[key.strip()] = value.strip().strip('"').strip("'")
+    except FileNotFoundError:
+        pass
+    return values
+
+
+def service_state(unit: str) -> dict[str, Any]:
+    active = systemctl_user("is-active", unit)
+    enabled = systemctl_user("is-enabled", unit)
+    return {
+        "unit": unit,
+        "active": active["stdout"],
+        "enabled": enabled["stdout"],
+        "is_active": active["returncode"] == 0,
+        "is_enabled": enabled["returncode"] == 0,
+    }
+
+
+def external_volume_state() -> dict[str, Any]:
+    service = service_state("cec-audio-control.service")
+    socket = service_state("cec-audio-control.socket")
+    capabilities = run(
+        [
+            "varlinkctl",
+            "call",
+            "unix:/run/user/1000/cec-audio-control/org.pipewire.ExternalVolume",
+            "org.pipewire.ExternalVolume.GetCapabilities",
+            '{"device":""}',
+        ]
+    )
+    return {
+        "config_exists": WIREPLUMBER_CONFIG.exists(),
+        "override_exists": CEC_SERVICE_OVERRIDE.exists(),
+        "service": service,
+        "socket": socket,
+        "capabilities_ok": capabilities["ok"]
+        and '"writeVolumeRelative":true' in capabilities["stdout"].replace(" ", ""),
+        "capabilities": capabilities["stdout"],
+    }
+
+
+def status() -> dict[str, Any]:
+    return {
+        "ok": True,
+        "config_file": str(CONFIG_FILE),
+        "config_exists": CONFIG_FILE.exists(),
+        "config": read_config(),
+        "root_helper_exists": ROOT_HELPER.exists(),
+        "sudoers_exists": SUDOERS_FILE.exists(),
+        "external_volume_script_exists": EXTERNAL_VOLUME_SCRIPT.exists(),
+        "volume_script_exists": VOLUME_SCRIPT.exists(),
+        "external_volume": external_volume_state(),
+        "services": {name: service_state(unit) for name, unit in USER_SERVICES.items()},
+    }
+
+
+def set_service(name: str, enabled: bool) -> dict[str, Any]:
+    if name not in USER_SERVICES:
+        return {"ok": False, "error": f"Unknown service: {name}"}
+    unit = USER_SERVICES[name]
+    action = "enable" if enabled else "disable"
+    state = "--now"
+    result = systemctl_user(action, state, unit)
+    payload = status()
+    payload["action"] = result
+    return payload
+
+
+def test_volume(action: str) -> dict[str, Any]:
+    if action not in {"up", "down", "mute"}:
+        return {"ok": False, "error": f"Unknown volume action: {action}"}
+    result = run([str(VOLUME_SCRIPT), action], timeout=12)
+    payload = status()
+    payload["action"] = result
+    return payload
+
+
+def wake_tv() -> dict[str, Any]:
+    result = run(
+        [
+            "busctl",
+            "--user",
+            "call",
+            "com.steampowered.CecDaemon1",
+            "/com/steampowered/CecDaemon1/Daemon",
+            "com.steampowered.CecDaemon1.Daemon1",
+            "Wake",
+        ]
+    )
+    payload = status()
+    payload["action"] = result
+    return payload
+
+
+def restart_external_volume() -> dict[str, Any]:
+    systemctl_user("stop", "cec-audio-control.service")
+    systemctl_user("start", "cec-audio-control.socket")
+    systemctl_user("restart", "wireplumber.service")
+    return status()
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    sub = parser.add_subparsers(dest="command", required=True)
+    sub.add_parser("status")
+    set_service_parser = sub.add_parser("set-service")
+    set_service_parser.add_argument("name", choices=sorted(USER_SERVICES))
+    set_service_parser.add_argument("state", choices=["on", "off"])
+    volume_parser = sub.add_parser("volume")
+    volume_parser.add_argument("action", choices=["up", "down", "mute"])
+    sub.add_parser("wake")
+    sub.add_parser("restart-external-volume")
+    args = parser.parse_args()
+
+    if args.command == "status":
+        payload = status()
+    elif args.command == "set-service":
+        payload = set_service(args.name, args.state == "on")
+    elif args.command == "volume":
+        payload = test_volume(args.action)
+    elif args.command == "wake":
+        payload = wake_tv()
+    elif args.command == "restart-external-volume":
+        payload = restart_external_volume()
+    else:
+        payload = {"ok": False, "error": "Unknown command"}
+
+    print(json.dumps(payload, separators=(",", ":")))
+    return 0 if payload.get("ok") else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -124,6 +124,39 @@ Install everything:
 
 Then restart Steam/Game Mode or reboot.
 
+## Decky Plugin
+
+This repository also includes an early Decky plugin under:
+
+```text
+decky/
+```
+
+The plugin is a Game Mode control panel for an already bootstrapped toolkit. It
+can:
+
+- show ExternalVolume/toolkit status
+- toggle the user services for Steam-button TV wake, TV standby suspend, and
+  Gamescope recovery
+- test TV wake/input selection
+- test volume up/down/mute
+- restart the CEC audio/WirePlumber path
+
+The plugin intentionally does not create sudoers rules or write root-owned
+system files. Install the toolkit from Desktop/SSH first, then use the plugin
+for day-to-day control.
+
+Build the plugin:
+
+```bash
+cd decky
+npm install
+npm run build
+```
+
+For local testing, install the built Decky plugin using Decky Loader developer
+tools or copy the plugin directory according to your Decky development workflow.
+
 ## Configure Your Machine
 
 The installer creates:
