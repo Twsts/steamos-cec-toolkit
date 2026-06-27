@@ -25,7 +25,18 @@ It was built for a living-room SteamOS box where:
 The project uses Valve's existing SteamOS CEC daemon (`cecd`) and PipeWire
 ExternalVolume plumbing.
 
-<img width="282" height="673" alt="image" src="https://github.com/user-attachments/assets/d0d05e52-e567-4005-a6ba-bea1e30460e3" />
+## Screenshots
+
+<table>
+  <tr>
+    <td><img src="assets/screenshots/steamui-relative-volume.png" alt="SteamOS Quick Settings showing relative TV volume plus and minus buttons" /></td>
+    <td><img src="assets/screenshots/decky-status-features.png" alt="SteamOS CEC Decky plugin status and feature toggles" /></td>
+  </tr>
+  <tr>
+    <td><img src="assets/screenshots/decky-configuration-actions.png" alt="SteamOS CEC Decky plugin configuration and actions" /></td>
+    <td><img src="assets/screenshots/decky-actions-debug.png" alt="SteamOS CEC Decky plugin actions and CEC debug capture" /></td>
+  </tr>
+</table>
 
 ## Install
 
