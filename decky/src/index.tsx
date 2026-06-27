@@ -306,25 +306,6 @@ function Content() {
         <InstallHelp status={status} />
       )}
 
-      <PanelSection title="Debug">
-        <PanelSectionRow>
-          <ButtonItem layout="below" disabled={busy || !status?.debug_helper_exists} onClick={() => void captureDebug()}>
-            Capture CEC Messages
-          </ButtonItem>
-        </PanelSectionRow>
-        <DebugOutput output={debugOutput} />
-        {debugOutput && (
-          <PanelSectionRow>
-            <ButtonItem layout="below" disabled={busy} onClick={() => setDebugOutput("")}>
-              Clear Capture
-            </ButtonItem>
-          </PanelSectionRow>
-        )}
-        <PanelSectionRow>
-          <ConfigDetails status={status} />
-        </PanelSectionRow>
-      </PanelSection>
-
       <PanelSection title="Features">
         <PanelSectionRow>
           <ToggleField
@@ -418,6 +399,25 @@ function Content() {
             Restart CEC Audio
           </ButtonItem>
         </PanelSectionRow>
+      </PanelSection>
+
+      <PanelSection title="Debug">
+        <PanelSectionRow>
+          <ConfigDetails status={status} />
+        </PanelSectionRow>
+        <PanelSectionRow>
+          <ButtonItem layout="below" disabled={busy || !status?.debug_helper_exists} onClick={() => void captureDebug()}>
+            Capture CEC Messages
+          </ButtonItem>
+        </PanelSectionRow>
+        <DebugOutput output={debugOutput} />
+        {debugOutput && (
+          <PanelSectionRow>
+            <ButtonItem layout="below" disabled={busy} onClick={() => setDebugOutput("")}>
+              Clear Capture
+            </ButtonItem>
+          </PanelSectionRow>
+        )}
       </PanelSection>
 
     </>
