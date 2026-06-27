@@ -1,5 +1,5 @@
 import { callable, definePlugin } from "@decky/api";
-import { ButtonItem, PanelSection, PanelSectionRow, ToggleField } from "@decky/ui";
+import { ButtonItem, DropdownItem, PanelSection, PanelSectionRow, ToggleField } from "@decky/ui";
 import { useEffect, useState } from "react";
 import { FaTv } from "react-icons/fa";
 
@@ -25,7 +25,9 @@ type Status = {
   ok: boolean;
   error?: string;
   config_exists?: boolean;
+  config?: Record<string, string>;
   root_helper_exists?: boolean;
+  debug_helper_exists?: boolean;
   sudoers_exists?: boolean;
   external_volume_script_exists?: boolean;
   volume_script_exists?: boolean;
@@ -36,9 +38,35 @@ type Status = {
     returncode: number;
     stdout: string;
   };
+  debug?: {
+    ok: boolean;
+    returncode: number;
+    stdout: string;
+  };
+};
+
+type CecDevice = {
+  logical_address: string;
+  device_type: string;
+  osd_name: string;
+  physical_address: string;
+  vendor: string;
+  power_status: string;
+  label: string;
+};
+
+type Discovery = {
+  ok: boolean;
+  error?: string;
+  cec_device: string;
+  devices: CecDevice[];
+  suggested: Record<string, string>;
+  raw: string;
 };
 
 const getStatus = callable<[], Status>("get_status");
+const discoverCec = callable<[], Discovery>("discover_cec");
+const setConfig = callable<[Record<string, string>], Status>("set_config");
 const setService = callable<[string, boolean], Status>("set_service");
 const setExternalVolume = callable<[boolean], Status>("set_external_volume");
 const volumeUp = callable<[], Status>("volume_up");
@@ -46,6 +74,7 @@ const volumeDown = callable<[], Status>("volume_down");
 const mute = callable<[], Status>("mute");
 const wakeTv = callable<[], Status>("wake_tv");
 const restartExternalVolume = callable<[], Status>("restart_external_volume");
+const debugCec = callable<[number], Status>("debug_cec");
 
 function yesNo(value: boolean | undefined): string {
   return value ? "OK" : "Missing";
@@ -78,6 +107,7 @@ function CapabilityDetails({ status }: { status: Status | null }) {
   return (
     <div style={{ fontSize: "12px", opacity: 0.8, lineHeight: 1.35 }}>
       <div>Root helper: {yesNo(status.root_helper_exists)}</div>
+      <div>Debug helper: {yesNo(status.debug_helper_exists)}</div>
       <div>Sudoers: {yesNo(status.sudoers_exists)}</div>
       <div>CEC volume buttons: {status.external_volume?.enabled ? "On" : "Off"}</div>
       <div>Relative volume: {status.external_volume?.capabilities_ok ? "OK" : "Inactive"}</div>
@@ -92,6 +122,7 @@ function needsInstallHelp(status: Status | null): boolean {
   }
   return (
     !status.root_helper_exists ||
+    !status.debug_helper_exists ||
     !status.sudoers_exists ||
     !status.volume_script_exists ||
     !status.external_volume_script_exists
@@ -108,6 +139,9 @@ function missingItems(status: Status | null): string[] {
   }
   if (!status.sudoers_exists) {
     items.push("sudoers rule");
+  }
+  if (!status.debug_helper_exists) {
+    items.push("CEC debug helper");
   }
   if (!status.volume_script_exists) {
     items.push("volume wrapper");
@@ -136,12 +170,75 @@ function InstallHelp({ status }: { status: Status | null }) {
   );
 }
 
+function configValue(status: Status | null, key: string, fallback: string): string {
+  return status?.config?.[key] || fallback;
+}
+
+function ConfigDetails({ status }: { status: Status | null }) {
+  if (!status?.ok) {
+    return null;
+  }
+
+  const cecDevice = configValue(status, "CEC_DEVICE", "/dev/cec0");
+  const initiator = configValue(status, "CEC_VOLUME_INITIATOR", "0");
+  const audioTarget = configValue(status, "CEC_AUDIO_LOGICAL_ADDRESS", "5");
+  const cardName = configValue(status, "HDMI_ALSA_CARD_NAME", "alsa_card.pci-0000_03_00.1");
+  const cardNick = configValue(status, "HDMI_ALSA_CARD_NICK", "HDA ATI HDMI");
+  const route = configValue(status, "EXTERNAL_VOLUME_ROUTE", "hdmi-output-0");
+
+  return (
+    <div style={{ fontSize: "12px", opacity: 0.8, lineHeight: 1.35 }}>
+      <div>CEC device: {cecDevice}</div>
+      <div>Volume path: logical {initiator} to {audioTarget}</div>
+      <div>Route: {route}</div>
+      <div>HDMI card: {cardName} / {cardNick}</div>
+    </div>
+  );
+}
+
+function DebugOutput({ status }: { status: Status | null }) {
+  const output = status?.debug?.stdout?.trim();
+  if (!output) {
+    return null;
+  }
+
+  const lines = output.split("\n").slice(-18).join("\n");
+
+  return (
+    <PanelSectionRow>
+      <pre
+        style={{
+          whiteSpace: "pre-wrap",
+          wordBreak: "break-word",
+          fontSize: "10px",
+          maxHeight: "260px",
+          overflow: "hidden",
+          opacity: 0.85,
+        }}
+      >
+        {lines}
+      </pre>
+    </PanelSectionRow>
+  );
+}
+
 function Content() {
   const [status, setStatus] = useState<Status | null>(null);
+  const [discovery, setDiscovery] = useState<Discovery | null>(null);
   const [busy, setBusy] = useState(false);
 
   const refresh = async () => {
     setStatus(await getStatus());
+  };
+
+  const refreshDiscovery = async () => {
+    setBusy(true);
+    try {
+      setDiscovery(await discoverCec());
+      setStatus(await getStatus());
+    } finally {
+      setBusy(false);
+    }
   };
 
   const runAction = async (action: () => Promise<Status>) => {
@@ -167,6 +264,12 @@ function Content() {
   const cecVolume = status?.external_volume;
   const installed = !!status?.ok && !!status.root_helper_exists && !!status.volume_script_exists;
   const showInstallHelp = needsInstallHelp(status);
+  const deviceOptions = (discovery?.devices || []).map((device) => ({
+    data: device.logical_address,
+    label: device.label,
+  }));
+  const initiator = configValue(status, "CEC_VOLUME_INITIATOR", discovery?.suggested?.CEC_VOLUME_INITIATOR || "0");
+  const audioTarget = configValue(status, "CEC_AUDIO_LOGICAL_ADDRESS", discovery?.suggested?.CEC_AUDIO_LOGICAL_ADDRESS || "5");
 
   return (
     <>
@@ -227,6 +330,34 @@ function Content() {
         </PanelSectionRow>
       </PanelSection>
 
+      <PanelSection title="Configuration">
+        <PanelSectionRow>
+          <ButtonItem layout="below" disabled={busy} onClick={() => void refreshDiscovery()}>
+            Discover CEC Devices
+          </ButtonItem>
+        </PanelSectionRow>
+        <PanelSectionRow>
+          <DropdownItem
+            label="Volume Initiator"
+            description="Usually TV logical address 0 for receivers that reject playback-device volume"
+            rgOptions={deviceOptions.length ? deviceOptions : [{ data: initiator, label: `Logical ${initiator}` }]}
+            selectedOption={initiator}
+            disabled={busy}
+            onChange={(option) => void runAction(() => setConfig({ CEC_VOLUME_INITIATOR: String(option.data) }))}
+          />
+        </PanelSectionRow>
+        <PanelSectionRow>
+          <DropdownItem
+            label="Audio Target"
+            description="The receiver/audio-system logical address that receives volume commands"
+            rgOptions={deviceOptions.length ? deviceOptions : [{ data: audioTarget, label: `Logical ${audioTarget}` }]}
+            selectedOption={audioTarget}
+            disabled={busy}
+            onChange={(option) => void runAction(() => setConfig({ CEC_AUDIO_LOGICAL_ADDRESS: String(option.data) }))}
+          />
+        </PanelSectionRow>
+      </PanelSection>
+
       <PanelSection title="Test">
         <PanelSectionRow>
           <ButtonItem layout="below" disabled={busy || !installed} onClick={() => void runAction(wakeTv)}>
@@ -253,6 +384,18 @@ function Content() {
             Restart CEC Audio
           </ButtonItem>
         </PanelSectionRow>
+      </PanelSection>
+
+      <PanelSection title="Debug">
+        <PanelSectionRow>
+          <ConfigDetails status={status} />
+        </PanelSectionRow>
+        <PanelSectionRow>
+          <ButtonItem layout="below" disabled={busy || !status?.debug_helper_exists} onClick={() => void runAction(() => debugCec(3))}>
+            Capture CEC Messages
+          </ButtonItem>
+        </PanelSectionRow>
+        <DebugOutput status={status} />
       </PanelSection>
     </>
   );

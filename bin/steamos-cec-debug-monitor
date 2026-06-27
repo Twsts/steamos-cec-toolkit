@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+CONFIG_FILE="${STEAMOS_CEC_CONFIG:-/etc/steamos-cec-toolkit.conf}"
+if [[ -r "$CONFIG_FILE" ]]; then
+  # shellcheck disable=SC1090
+  source "$CONFIG_FILE"
+fi
+
+STEAMOS_CEC_USER="${STEAMOS_CEC_USER:-deck}"
+USER_CONFIG="/home/$STEAMOS_CEC_USER/.config/steamos-cec-toolkit/config.conf"
+if [[ -r "$USER_CONFIG" ]]; then
+  # shellcheck disable=SC1090
+  source "$USER_CONFIG"
+fi
+
+CEC_DEVICE="${CEC_DEVICE:-/dev/cec0}"
+seconds="${1:-3}"
+
+case "$seconds" in
+  1|2|3|4|5) ;;
+  *) echo "usage: $0 1|2|3|4|5" >&2; exit 2 ;;
+esac
+
+exec /usr/bin/cec-ctl -d "$CEC_DEVICE" -s --monitor-all --monitor-time "$seconds" --show-raw --wall-clock

@@ -86,10 +86,14 @@ install -m 0755 "$PROJECT_DIR/bin/steamos-cec-external-volume" "$HOME/.local/bin
 sudo install -d -m 0755 /var/lib/steamos-cec-toolkit
 sudo install -m 0755 "$PROJECT_DIR/bin/steamos-cec-volume-raw" \
   /var/lib/steamos-cec-toolkit/steamos-cec-volume-raw
+sudo install -m 0755 "$PROJECT_DIR/bin/steamos-cec-debug-monitor" \
+  /var/lib/steamos-cec-toolkit/steamos-cec-debug-monitor
 
 sudoers_tmp="$(mktemp)"
-printf '%s ALL=(root) NOPASSWD: /var/lib/steamos-cec-toolkit/steamos-cec-volume-raw *\n' \
-  "$(id -un)" > "$sudoers_tmp"
+{
+  printf '%s ALL=(root) NOPASSWD: /var/lib/steamos-cec-toolkit/steamos-cec-volume-raw *\n' "$(id -un)"
+  printf '%s ALL=(root) NOPASSWD: /var/lib/steamos-cec-toolkit/steamos-cec-debug-monitor *\n' "$(id -un)"
+} > "$sudoers_tmp"
 sudo install -m 0440 "$sudoers_tmp" /etc/sudoers.d/zz-steamos-cec-toolkit-volume
 rm -f "$sudoers_tmp"
 

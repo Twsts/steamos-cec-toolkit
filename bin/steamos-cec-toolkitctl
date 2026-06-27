@@ -6,13 +6,17 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 from pathlib import Path
 from typing import Any
 
 
-CONFIG_FILE = Path(os.environ.get("STEAMOS_CEC_CONFIG", "/etc/steamos-cec-toolkit.conf"))
+SYSTEM_CONFIG_FILE = Path(os.environ.get("STEAMOS_CEC_CONFIG", "/etc/steamos-cec-toolkit.conf"))
+USER_CONFIG_FILE = Path.home() / ".config/steamos-cec-toolkit/config.conf"
+CONFIG_FILE = USER_CONFIG_FILE if USER_CONFIG_FILE.exists() else SYSTEM_CONFIG_FILE
 ROOT_HELPER = Path("/var/lib/steamos-cec-toolkit/steamos-cec-volume-raw")
+DEBUG_HELPER = Path("/var/lib/steamos-cec-toolkit/steamos-cec-debug-monitor")
 SUDOERS_FILE = Path("/etc/sudoers.d/zz-steamos-cec-toolkit-volume")
 EXTERNAL_VOLUME_SCRIPT = Path.home() / ".local/bin/steamos-cec-external-volume"
 VOLUME_SCRIPT = Path.home() / ".local/bin/steamos-cec-volume"
@@ -106,8 +110,15 @@ def systemctl_user(*args: str) -> dict[str, Any]:
 
 def read_config() -> dict[str, str]:
     values: dict[str, str] = {}
+    for path in (SYSTEM_CONFIG_FILE, USER_CONFIG_FILE):
+        values.update(read_config_file(path))
+    return values
+
+
+def read_config_file(path: Path) -> dict[str, str]:
+    values: dict[str, str] = {}
     try:
-        with CONFIG_FILE.open(encoding="utf-8") as file:
+        with path.open(encoding="utf-8") as file:
             for raw_line in file:
                 line = raw_line.strip()
                 if not line or line.startswith("#") or "=" not in line:
@@ -119,6 +130,31 @@ def read_config() -> dict[str, str]:
     return values
 
 
+def write_user_config(updates: dict[str, str]) -> None:
+    allowed = {
+        "CEC_DEVICE",
+        "CEC_VOLUME_INITIATOR",
+        "CEC_AUDIO_LOGICAL_ADDRESS",
+        "HDMI_ALSA_CARD_NAME",
+        "HDMI_ALSA_CARD_NICK",
+        "EXTERNAL_VOLUME_ROUTE",
+    }
+    current = read_config()
+    for key, value in updates.items():
+        if key not in allowed:
+            raise ValueError(f"Unsupported config key: {key}")
+        if not re.fullmatch(r"[A-Za-z0-9_./:-]+", value):
+            raise ValueError(f"Unsupported value for {key}")
+        current[key] = value
+
+    USER_CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+    lines = ["# SteamOS CEC Toolkit user configuration.\n"]
+    for key in sorted(allowed):
+        if key in current:
+            lines.append(f"{key}={current[key]}\n")
+    USER_CONFIG_FILE.write_text("".join(lines), encoding="utf-8")
+
+
 def service_state(unit: str) -> dict[str, Any]:
     active = systemctl_user("is-active", unit)
     enabled = systemctl_user("is-enabled", unit)
@@ -128,6 +164,77 @@ def service_state(unit: str) -> dict[str, Any]:
         "enabled": enabled["stdout"],
         "is_active": active["returncode"] == 0,
         "is_enabled": enabled["returncode"] == 0,
+    }
+
+
+def cec_label(logical: str, device_type: str, osd_name: str) -> str:
+    parts = [logical]
+    if device_type:
+        parts.append(device_type)
+    if osd_name:
+        parts.append(osd_name)
+    return " - ".join(parts)
+
+
+def discover_cec() -> dict[str, Any]:
+    config = read_config()
+    cec_device = config.get("CEC_DEVICE", "/dev/cec0")
+    result = run(["cec-ctl", "-d", cec_device, "--show-topology"], timeout=12)
+    devices: list[dict[str, str]] = []
+    current: dict[str, str] | None = None
+
+    for line in result["stdout"].splitlines():
+        match = re.search(r"System Information for device (\d+) \(([^)]+)\)", line)
+        if match:
+            if current:
+                current["label"] = cec_label(
+                    current["logical_address"],
+                    current.get("device_type", ""),
+                    current.get("osd_name", ""),
+                )
+                devices.append(current)
+            current = {
+                "logical_address": match.group(1),
+                "device_type": match.group(2),
+                "osd_name": "",
+                "physical_address": "",
+                "vendor": "",
+                "power_status": "",
+            }
+            continue
+        if current is None:
+            continue
+        if "Physical Address" in line:
+            current["physical_address"] = line.split(":", 1)[-1].strip()
+        elif "Vendor ID" in line:
+            current["vendor"] = line.split(":", 1)[-1].strip()
+        elif "OSD Name" in line:
+            current["osd_name"] = line.split(":", 1)[-1].strip().strip("'")
+        elif "Power Status" in line:
+            current["power_status"] = line.split(":", 1)[-1].strip()
+
+    if current:
+        current["label"] = cec_label(
+            current["logical_address"],
+            current.get("device_type", ""),
+            current.get("osd_name", ""),
+        )
+        devices.append(current)
+
+    tv = next((device for device in devices if device.get("device_type") == "TV"), None)
+    audio = next(
+        (device for device in devices if device.get("device_type") == "Audio System"),
+        None,
+    )
+    return {
+        "ok": result["ok"],
+        "cec_device": cec_device,
+        "devices": devices,
+        "suggested": {
+            "CEC_VOLUME_INITIATOR": tv["logical_address"] if tv else "0",
+            "CEC_AUDIO_LOGICAL_ADDRESS": audio["logical_address"] if audio else "5",
+        },
+        "raw": result["stdout"],
     }
 
 
@@ -159,12 +266,17 @@ def external_volume_state() -> dict[str, Any]:
 
 
 def status() -> dict[str, Any]:
+    config = read_config()
     return {
         "ok": True,
-        "config_file": str(CONFIG_FILE),
-        "config_exists": CONFIG_FILE.exists(),
-        "config": read_config(),
+        "config_file": str(USER_CONFIG_FILE if USER_CONFIG_FILE.exists() else SYSTEM_CONFIG_FILE),
+        "system_config_file": str(SYSTEM_CONFIG_FILE),
+        "user_config_file": str(USER_CONFIG_FILE),
+        "config_exists": SYSTEM_CONFIG_FILE.exists() or USER_CONFIG_FILE.exists(),
+        "user_config_exists": USER_CONFIG_FILE.exists(),
+        "config": config,
         "root_helper_exists": ROOT_HELPER.exists(),
+        "debug_helper_exists": DEBUG_HELPER.exists(),
         "sudoers_exists": SUDOERS_FILE.exists(),
         "external_volume_script_exists": EXTERNAL_VOLUME_SCRIPT.exists(),
         "volume_script_exists": VOLUME_SCRIPT.exists(),
@@ -182,6 +294,16 @@ def set_service(name: str, enabled: bool) -> dict[str, Any]:
     result = systemctl_user(action, state, unit)
     payload = status()
     payload["action"] = result
+    return payload
+
+
+def set_config(updates: dict[str, str]) -> dict[str, Any]:
+    try:
+        write_user_config(updates)
+    except ValueError as error:
+        return {"ok": False, "error": str(error)}
+    payload = status()
+    payload["action"] = {"ok": True, "returncode": 0, "stdout": str(USER_CONFIG_FILE)}
     return payload
 
 
@@ -216,6 +338,21 @@ def restart_external_volume() -> dict[str, Any]:
     systemctl_user("start", "cec-audio-control.socket")
     systemctl_user("restart", "wireplumber.service")
     return status()
+
+
+def debug_cec(seconds: int) -> dict[str, Any]:
+    if seconds < 1 or seconds > 5:
+        return {"ok": False, "error": "Debug capture must be between 1 and 5 seconds"}
+    result = run(["sudo", "-n", str(DEBUG_HELPER), str(seconds)], timeout=seconds + 6)
+    payload = status()
+    payload["debug"] = result
+    if not DEBUG_HELPER.exists():
+        payload["ok"] = False
+        payload["error"] = "Debug helper is missing; rerun install.sh to enable CEC debug capture."
+    elif result["returncode"] != 0:
+        payload["ok"] = False
+        payload["error"] = result["stdout"] or "CEC debug capture failed"
+    return payload
 
 
 def write_external_volume_files() -> None:
@@ -264,6 +401,9 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("status")
+    sub.add_parser("discover-cec")
+    set_config_parser = sub.add_parser("set-config")
+    set_config_parser.add_argument("updates")
     set_service_parser = sub.add_parser("set-service")
     set_service_parser.add_argument("name", choices=sorted(USER_SERVICES))
     set_service_parser.add_argument("state", choices=["on", "off"])
@@ -271,18 +411,36 @@ def main() -> int:
     external_volume_parser.add_argument("state", choices=["on", "off"])
     volume_parser = sub.add_parser("volume")
     volume_parser.add_argument("action", choices=["up", "down", "mute"])
+    debug_parser = sub.add_parser("debug-cec")
+    debug_parser.add_argument("seconds", nargs="?", default=3, type=int)
     sub.add_parser("wake")
     sub.add_parser("restart-external-volume")
     args = parser.parse_args()
 
     if args.command == "status":
         payload = status()
+    elif args.command == "discover-cec":
+        payload = discover_cec()
+    elif args.command == "set-config":
+        try:
+            updates = json.loads(args.updates)
+            if not isinstance(updates, dict) or not all(
+                isinstance(key, str) and isinstance(value, str)
+                for key, value in updates.items()
+            ):
+                raise ValueError("updates must be a string map")
+        except Exception as error:
+            payload = {"ok": False, "error": f"Invalid config payload: {error}"}
+        else:
+            payload = set_config(updates)
     elif args.command == "set-service":
         payload = set_service(args.name, args.state == "on")
     elif args.command == "set-external-volume":
         payload = set_external_volume(args.state == "on")
     elif args.command == "volume":
         payload = test_volume(args.action)
+    elif args.command == "debug-cec":
+        payload = debug_cec(args.seconds)
     elif args.command == "wake":
         payload = wake_tv()
     elif args.command == "restart-external-volume":

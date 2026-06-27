@@ -68,6 +68,12 @@ class Plugin:
     async def get_status(self) -> dict:
         return await self._run_ctl("status")
 
+    async def discover_cec(self) -> dict:
+        return await self._run_ctl("discover-cec")
+
+    async def set_config(self, updates: dict) -> dict:
+        return await self._run_ctl("set-config", json.dumps(updates, separators=(",", ":")))
+
     async def set_service(self, name: str, enabled: bool) -> dict:
         return await self._run_ctl("set-service", name, "on" if enabled else "off")
 
@@ -88,6 +94,10 @@ class Plugin:
 
     async def restart_external_volume(self) -> dict:
         return await self._run_ctl("restart-external-volume")
+
+    async def debug_cec(self, seconds: int = 3) -> dict:
+        safe_seconds = max(1, min(int(seconds), 5))
+        return await self._run_ctl("debug-cec", str(safe_seconds))
 
     async def _main(self):
         decky.logger.info("SteamOS CEC Toolkit plugin loaded")

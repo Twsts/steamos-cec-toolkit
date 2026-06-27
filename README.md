@@ -140,13 +140,19 @@ can:
   `+ / -` control and the normal SteamOS volume bar
 - toggle the user services for Steam-button TV wake, TV standby suspend, and
   Gamescope recovery
+- discover CEC devices and choose the volume initiator/audio target from
+  dropdowns
 - test TV wake/input selection
 - test volume up/down/mute
 - restart the CEC audio/WirePlumber path
 
 The plugin intentionally does not create sudoers rules or write root-owned
 system files. Install the toolkit from Desktop/SSH first, then use the plugin
-for day-to-day control.
+for day-to-day control. Runtime choices made in the plugin are written to:
+
+```text
+~/.config/steamos-cec-toolkit/config.conf
+```
 
 Build the plugin:
 
@@ -167,7 +173,8 @@ The installer creates:
 /etc/steamos-cec-toolkit.conf
 ```
 
-Edit it if your CEC or HDMI card IDs differ:
+The Decky plugin can write user-level overrides for common runtime choices. For
+system defaults, edit:
 
 ```bash
 sudoedit /etc/steamos-cec-toolkit.conf
@@ -236,6 +243,50 @@ varlinkctl call \
 ```
 
 If the receiver volume moves, the shim is working.
+
+## CEC Debug Capture
+
+The Decky plugin has a Debug panel that can capture a short window of live CEC
+messages. This uses a narrow root helper because `cec-ctl --monitor-all`
+normally requires root on SteamOS.
+
+From SSH/Desktop you can run the same capture manually:
+
+```bash
+~/.local/bin/steamos-cec-toolkitctl debug-cec 3
+```
+
+The capture window is intentionally limited to 1-5 seconds. It is meant for
+checking routing, source activation, standby broadcasts, and volume commands
+without leaving a long-running root monitor behind.
+
+## Hardware and Topology Notes
+
+The defaults match a common UGREEN DP-to-HDMI CEC adapter setup where SteamOS is
+a playback device, the TV is logical address `0`, and the receiver/audio system
+is logical address `5`. Other HDMI chains can differ.
+
+Check topology:
+
+```bash
+cec-ctl -d /dev/cec0 --show-topology
+```
+
+Then update `/etc/steamos-cec-toolkit.conf` if needed:
+
+```bash
+CEC_DEVICE=/dev/cec0
+CEC_VOLUME_INITIATOR=0
+CEC_AUDIO_LOGICAL_ADDRESS=5
+HDMI_ALSA_CARD_NAME=alsa_card.pci-0000_03_00.1
+HDMI_ALSA_CARD_NICK=HDA ATI HDMI
+EXTERNAL_VOLUME_ROUTE=hdmi-output-0
+```
+
+The toolkit is configurable, but not fully topology-agnostic yet. In
+particular, some receivers accept volume only from the TV logical address while
+others may accept it from the SteamOS playback address. HDMI/WirePlumber card
+matching can also vary by GPU, adapter, and distro image.
 
 ## Steam Button TV Wake and Input Switching
 

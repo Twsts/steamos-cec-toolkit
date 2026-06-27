@@ -7,6 +7,13 @@ if [[ -r "$CONFIG_FILE" ]]; then
   source "$CONFIG_FILE"
 fi
 
+STEAMOS_CEC_USER="${STEAMOS_CEC_USER:-deck}"
+USER_CONFIG="/home/$STEAMOS_CEC_USER/.config/steamos-cec-toolkit/config.conf"
+if [[ -r "$USER_CONFIG" ]]; then
+  # shellcheck disable=SC1090
+  source "$USER_CONFIG"
+fi
+
 CEC_DEVICE="${CEC_DEVICE:-/dev/cec0}"
 CEC_VOLUME_INITIATOR="${CEC_VOLUME_INITIATOR:-0}"
 CEC_AUDIO_LOGICAL_ADDRESS="${CEC_AUDIO_LOGICAL_ADDRESS:-5}"
