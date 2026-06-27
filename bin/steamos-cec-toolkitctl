@@ -46,8 +46,8 @@ monitor.alsa.rules = [
   {
     matches = [
       {
-        device.name = "{hdmi_alsa_card_name}"
-        device.nick = "{hdmi_alsa_card_nick}"
+        device.name = "@HDMI_ALSA_CARD_NAME@"
+        device.nick = "@HDMI_ALSA_CARD_NICK@"
       }
     ]
     actions = {
@@ -374,17 +374,16 @@ def write_external_volume_files() -> None:
     hdmi_alsa_card_name = config.get("HDMI_ALSA_CARD_NAME", "alsa_card.pci-0000_03_00.1")
     hdmi_alsa_card_nick = config.get("HDMI_ALSA_CARD_NICK", "HDA ATI HDMI")
 
+    wireplumber_config = (
+        WIREPLUMBER_CONFIG_TEMPLATE
+        .replace("@HDMI_ALSA_CARD_NAME@", hdmi_alsa_card_name)
+        .replace("@HDMI_ALSA_CARD_NICK@", hdmi_alsa_card_nick)
+    )
+    WIREPLUMBER_CONFIG.parent.mkdir(parents=True, exist_ok=True)
+    WIREPLUMBER_CONFIG.write_text(wireplumber_config, encoding="utf-8")
+
     CEC_SERVICE_OVERRIDE.parent.mkdir(parents=True, exist_ok=True)
     CEC_SERVICE_OVERRIDE.write_text(CEC_SERVICE_OVERRIDE_CONTENT, encoding="utf-8")
-
-    WIREPLUMBER_CONFIG.parent.mkdir(parents=True, exist_ok=True)
-    WIREPLUMBER_CONFIG.write_text(
-        WIREPLUMBER_CONFIG_TEMPLATE.format(
-            hdmi_alsa_card_name=hdmi_alsa_card_name,
-            hdmi_alsa_card_nick=hdmi_alsa_card_nick,
-        ),
-        encoding="utf-8",
-    )
 
 
 def remove_external_volume_files() -> None:
