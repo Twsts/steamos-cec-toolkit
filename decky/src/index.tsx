@@ -89,6 +89,21 @@ function CapabilityDetails({ status }: { status: Status | null }) {
   );
 }
 
+function needsInstallHelp(status: Status | null): boolean {
+  if (!status?.ok) {
+    return false;
+  }
+  return (
+    !status.config_exists ||
+    !status.root_helper_exists ||
+    !status.sudoers_exists ||
+    !status.volume_script_exists ||
+    !status.external_volume?.config_exists ||
+    !status.external_volume?.override_exists ||
+    !status.external_volume?.capabilities_ok
+  );
+}
+
 function Content() {
   const [status, setStatus] = useState<Status | null>(null);
   const [busy, setBusy] = useState(false);
@@ -118,6 +133,7 @@ function Content() {
   const tvStandby = status?.services?.["tv-standby"];
   const gamescopeRecovery = status?.services?.["gamescope-recovery"];
   const installed = !!status?.ok && !!status.root_helper_exists && !!status.volume_script_exists;
+  const showInstallHelp = needsInstallHelp(status);
 
   return (
     <>
@@ -134,6 +150,17 @@ function Content() {
           </ButtonItem>
         </PanelSectionRow>
       </PanelSection>
+
+      {showInstallHelp && (
+        <PanelSection title="Install">
+          <PanelSectionRow>
+            <div style={{ fontSize: "12px", opacity: 0.8, lineHeight: 1.35 }}>
+              Install or update the toolkit from Desktop/SSH first. This plugin intentionally does not write sudoers or
+              root-owned system files.
+            </div>
+          </PanelSectionRow>
+        </PanelSection>
+      )}
 
       <PanelSection title="Features">
         <PanelSectionRow>
@@ -190,15 +217,6 @@ function Content() {
           <ButtonItem layout="below" disabled={busy} onClick={() => void runAction(restartExternalVolume)}>
             Restart CEC Audio
           </ButtonItem>
-        </PanelSectionRow>
-      </PanelSection>
-
-      <PanelSection title="Install">
-        <PanelSectionRow>
-          <div style={{ fontSize: "12px", opacity: 0.8, lineHeight: 1.35 }}>
-            Install or update the toolkit from Desktop/SSH first. This plugin intentionally does not write sudoers or
-            root-owned system files.
-          </div>
         </PanelSectionRow>
       </PanelSection>
     </>
