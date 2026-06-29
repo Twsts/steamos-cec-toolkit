@@ -221,7 +221,7 @@ git clone https://github.com/Twsts/steamos-cec-toolkit.git
 cd steamos-cec-toolkit
 ```
 
-Install the ExternalVolume integration and the Steam-button TV wake/input-switch
+Install the ExternalVolume integration and controller TV wake/input-switch
 helper:
 
 ```bash
@@ -235,7 +235,8 @@ Install everything:
   --enable-steam-button \
   --enable-tv-standby-suspend \
   --enable-gamescope-recovery \
-  --enable-before-sleep
+  --enable-before-sleep \
+  --enable-usb-wake
 ```
 
 Then restart Steam/Game Mode or reboot.
@@ -282,8 +283,9 @@ can:
 - show ExternalVolume/toolkit status
 - toggle SteamOS CEC volume buttons on/off so you can switch between relative
   `+ / -` control and the normal SteamOS volume bar
-- toggle the user services for Steam-button TV wake, TV standby suspend,
-  SteamOS sleep/shutdown TV standby, and Gamescope recovery
+- toggle controller wake/input switching, TV standby suspend, SteamOS
+  sleep/shutdown TV standby, Bluetooth/controller wake from suspend, and
+  Gamescope recovery
 - discover CEC devices and choose the volume initiator/audio target from
   dropdowns
 - test TV wake/input selection
@@ -457,7 +459,7 @@ On a working CEC topology this is the same behavior users expect from a console:
 press the controller button, the display wakes, the AVR/TV selects the SteamOS
 input, and Game Mode appears.
 
-Default report parsing targets the original Steam Controller:
+The Steam Controller HID fallback uses this default report parsing:
 
 ```bash
 STEAM_BUTTON_HID_ID=0003:000028DE:00001304
@@ -466,7 +468,8 @@ STEAM_BUTTON_BYTE=4
 STEAM_BUTTON_MASK=0x01
 ```
 
-Other controllers may require different values or a new parser.
+Other controllers use the generic gamepad Home/Guide input-event path when
+Linux exposes a supported system button event.
 
 ## Optional TV Standby Suspend
 
@@ -543,46 +546,19 @@ Also remove `/etc/steamos-cec-toolkit.conf`:
 ./uninstall.sh --remove-config
 ```
 
-## SteamOS Updates
-
-The important user files live under the SteamOS desktop user's `$HOME`, and the
-helper lives under `/var/lib/steamos-cec-toolkit`. These normally survive
-SteamOS updates.
-
-The sudoers file is under `/etc/sudoers.d`, which is an overlay on SteamOS and
-usually survives normal updates. A factory reset, reimage, or major platform
-change may still remove local modifications.
-
-After an update, run:
-
-```bash
-systemctl --user is-active cec-audio-control.service wireplumber.service
-wpctl status
-varlinkctl call \
-  unix:/run/user/1000/cec-audio-control/org.pipewire.ExternalVolume \
-  org.pipewire.ExternalVolume.GetCapabilities \
-  '{"device":""}'
-```
-
-If Game Mode still shows `+` / `-`, the integration is intact.
-
 ## Safety Notes
 
-This project grants passwordless sudo only for one fixed root helper:
+This project grants passwordless sudo only for fixed toolkit helpers:
 
 ```text
 /var/lib/steamos-cec-toolkit/steamos-cec-volume-raw *
+/var/lib/steamos-cec-toolkit/steamos-cec-debug-monitor *
+/var/lib/steamos-cec-toolkit/steamos-cec-power-standby-control *
+/var/lib/steamos-cec-toolkit/steamos-cec-usb-wake-control *
 ```
 
-The helper accepts only:
-
-```text
-up
-down
-mute
-```
-
-Do not broaden the sudoers rule.
+These helpers validate their limited subcommands and should not be replaced by
+broader shell access. Do not broaden the sudoers rule.
 
 ## License
 
