@@ -69,6 +69,7 @@ require_command unzip
 say "SteamOS CEC Toolkit installer"
 say "This installs the HDMI-CEC toolkit and the Decky plugin for Game Mode."
 say "You will be asked for sudo once or a few times while root-owned files are installed."
+say "The feature choices below can be changed later from the SteamOS CEC Decky plugin."
 
 if [[ ! -d "$HOME/homebrew" ]]; then
   say "Decky Loader was not found at $HOME/homebrew."
