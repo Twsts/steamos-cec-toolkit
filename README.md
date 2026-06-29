@@ -93,6 +93,13 @@ Known-good reference setup:
 - Gamepad Home/Guide button support through Linux input events.
 - Steam Controller for the Steam Controller HID fallback helper.
 
+Controller wake from suspend has been tested on the reference setup with:
+
+- Sony DualSense / PS5 controller over Bluetooth.
+- Sony DualShock 4 / PS4 controller over Bluetooth.
+- Original Steam Controller.
+- 8BitDo controller over Bluetooth.
+
 Other adapters and controllers may work, but you should verify the CEC topology
 and whether the controller exposes a normal gamepad Home/Guide input event.
 
@@ -470,6 +477,11 @@ STEAM_BUTTON_MASK=0x01
 
 Other controllers use the generic gamepad Home/Guide input-event path when
 Linux exposes a supported system button event.
+
+On the reference setup, suspend wake plus CEC TV/input activation has been
+tested with DualSense, DualShock 4, Steam Controller, and 8BitDo controllers.
+This depends on the Bluetooth/USB adapter being allowed to wake the machine from
+suspend, so unsupported adapters may still need platform-specific tuning.
 
 ## Optional TV Standby Suspend
 
