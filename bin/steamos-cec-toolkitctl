@@ -227,6 +227,24 @@ def cec_label(logical: str, device_type: str, osd_name: str) -> str:
 def discover_cec() -> dict[str, Any]:
     config = read_config()
     cec_device = config.get("CEC_DEVICE", "/dev/cec0")
+    cec_path = Path(cec_device)
+    if not cec_path.exists():
+        available = sorted(str(path) for path in Path("/dev").glob("cec*"))
+        return {
+            "ok": False,
+            "cec_device": cec_device,
+            "devices": [],
+            "suggested": {
+                "CEC_VOLUME_INITIATOR": "0",
+                "CEC_AUDIO_LOGICAL_ADDRESS": "5",
+            },
+            "error": (
+                f"No CEC adapter found at {cec_device}. "
+                "Check that your HDMI-CEC adapter is connected and exposed as /dev/cec*. "
+                f"Available CEC devices: {', '.join(available) if available else 'none'}."
+            ),
+            "raw": "",
+        }
     result = run(["cec-ctl", "-d", cec_device, "--show-topology"], timeout=12)
     devices: list[dict[str, str]] = []
     current: dict[str, str] | None = None
@@ -282,6 +300,7 @@ def discover_cec() -> dict[str, Any]:
             "CEC_VOLUME_INITIATOR": tv["logical_address"] if tv else "0",
             "CEC_AUDIO_LOGICAL_ADDRESS": audio["logical_address"] if audio else "5",
         },
+        "error": "" if result["ok"] else result["stdout"],
         "raw": result["stdout"],
     }
     if result["ok"]:

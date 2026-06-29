@@ -179,7 +179,19 @@ if suggested:
     )
 PY
 else
-  say "CEC discovery did not complete yet. You can run it later from the Decky plugin."
+  say "CEC discovery did not complete yet."
+  if [[ -s /tmp/steamos-cec-discovery.json ]]; then
+    python3 - <<'PY' || true
+import json
+from pathlib import Path
+
+payload = json.loads(Path("/tmp/steamos-cec-discovery.json").read_text())
+error = payload.get("error", "")
+if error:
+    print(error)
+PY
+  fi
+  say "You can run discovery later from the Decky plugin after the CEC adapter is available."
   sed -n '1,8p' /tmp/steamos-cec-discovery.err 2>/dev/null || true
 fi
 
