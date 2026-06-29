@@ -71,6 +71,9 @@ class Plugin:
     async def discover_cec(self) -> dict:
         return await self._run_ctl("discover-cec")
 
+    async def discover_input(self) -> dict:
+        return await self._run_ctl("discover-input")
+
     async def set_config(self, updates: dict) -> dict:
         return await self._run_ctl("set-config", json.dumps(updates, separators=(",", ":")))
 

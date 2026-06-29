@@ -116,7 +116,7 @@ journalctl --user -b -u wireplumber.service --no-pager
 journalctl --user -b -u cec-audio-control.service --no-pager
 ```
 
-## Steam Button Does Not Switch Input
+## Controller Button Does Not Switch Input
 
 Check the service:
 
@@ -143,6 +143,10 @@ STEAM_BUTTON_REPORT_ID=
 STEAM_BUTTON_BYTE=
 STEAM_BUTTON_MASK=
 ```
+
+For non-Steam-Controller gamepads, use the Decky plugin's `Discover Controllers`
+action first. Generic controller wake listens for gamepad-like Linux input
+devices and supported Home/Guide button events.
 
 The included parser is known to target the original Steam Controller. Other
 controllers may need a small code change.

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Use the Steam button to wake the TV/AVR and activate this HDMI source."""
+"""Use controller Home/Guide buttons to wake TV/AVR and activate this source."""
 
 from __future__ import annotations
 
@@ -7,8 +7,10 @@ import glob
 import logging
 import os
 import selectors
+import struct
 import subprocess
 import time
+from dataclasses import dataclass
 
 
 CEC_BUS = "com.steampowered.CecDaemon1"
@@ -25,8 +27,54 @@ SHORT_PRESS_MAX_SECONDS = 1.5
 SHORT_PRESS_CONFIRM_SECONDS = 1.0
 SHORT_PRESS_CONFIRM_REPORTS = 20
 
+INPUT_EVENT = struct.Struct("llHHI")
+EV_KEY = 0x01
+KEY_RELEASED = 0
+KEY_PRESSED = 1
+
+GAMEPAD_HOME_CODES = {
+    102: "KEY_HOME",
+    172: "KEY_HOMEPAGE",
+    316: "BTN_MODE",
+}
+
+GAMEPAD_NAME_HINTS = (
+    "8bitdo",
+    "controller",
+    "dualsense",
+    "dualshock",
+    "gamepad",
+    "guitar",
+    "joystick",
+    "nintendo",
+    "playstation",
+    "santroller",
+    "shield",
+    "x-box",
+    "xbox",
+)
+
+NON_GAMEPAD_NAME_HINTS = (
+    "consumer control",
+    "keyboard",
+    "mouse",
+    "power button",
+    "sleep button",
+    "steamos-manager",
+    "system control",
+    "touchpad",
+)
+
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
-LOG = logging.getLogger("steamos-cec-steam-button")
+LOG = logging.getLogger("steamos-cec-controller-wake")
+
+
+@dataclass(frozen=True)
+class InputDevice:
+    event: str
+    name: str
+    phys: str
+    handlers: tuple[str, ...]
 
 
 def read_config(path: str = DEFAULT_CONFIG) -> dict[str, str]:
@@ -50,6 +98,8 @@ EXCLUDED_PHYS = CONFIG.get("STEAM_BUTTON_EXCLUDED_PHYS", "input6")
 REPORT_ID = int(CONFIG.get("STEAM_BUTTON_REPORT_ID", "0x45"), 0)
 BUTTON_BYTE = int(CONFIG.get("STEAM_BUTTON_BYTE", "4"), 0)
 BUTTON_MASK = int(CONFIG.get("STEAM_BUTTON_MASK", "0x01"), 0)
+ENABLE_GENERIC_INPUT = CONFIG.get("CONTROLLER_WAKE_GENERIC_INPUT", "1") not in {"0", "false", "False", "no"}
+ENABLE_STEAM_HID = CONFIG.get("CONTROLLER_WAKE_STEAM_HID", "1") not in {"0", "false", "False", "no"}
 
 
 def hid_properties(path: str) -> dict[str, str]:
@@ -74,6 +124,55 @@ def is_controller(path: str) -> bool:
     hid_id = properties.get("HID_ID", "").lower()
     hid_phys = properties.get("HID_PHYS", "").lower()
     return HID_ID.lower() in hid_id and EXCLUDED_PHYS.lower() not in hid_phys
+
+
+def input_devices() -> dict[str, InputDevice]:
+    devices: dict[str, InputDevice] = {}
+    current: dict[str, object] = {}
+
+    def flush() -> None:
+        if not current:
+            return
+        name = str(current.get("name", ""))
+        phys = str(current.get("phys", ""))
+        handlers = tuple(str(current.get("handlers", "")).split())
+        for handler in handlers:
+            if handler.startswith("event"):
+                devices[f"/dev/input/{handler}"] = InputDevice(
+                    event=handler,
+                    name=name,
+                    phys=phys,
+                    handlers=handlers,
+                )
+
+    try:
+        with open("/proc/bus/input/devices", encoding="utf-8") as file:
+            for raw_line in file:
+                line = raw_line.rstrip("\n")
+                if not line:
+                    flush()
+                    current = {}
+                    continue
+                if line.startswith("N: Name="):
+                    current["name"] = line.split("=", 1)[1].strip().strip('"')
+                elif line.startswith("P: Phys="):
+                    current["phys"] = line.split("=", 1)[1].strip()
+                elif line.startswith("H: Handlers="):
+                    current["handlers"] = line.split("=", 1)[1].strip()
+            flush()
+    except OSError as error:
+        LOG.warning("Cannot read /proc/bus/input/devices: %s", error)
+    return devices
+
+
+def is_gamepad_input_device(device: InputDevice) -> bool:
+    name = device.name.lower()
+    handlers = set(device.handlers)
+    if any(hint in name for hint in NON_GAMEPAD_NAME_HINTS):
+        return False
+    if any(handler.startswith("js") for handler in handlers):
+        return True
+    return any(hint in name for hint in GAMEPAD_NAME_HINTS)
 
 
 def cec_wake() -> subprocess.CompletedProcess[str]:
@@ -139,30 +238,62 @@ def activate_source(reason: str) -> None:
 def refresh_devices(
     selector: selectors.BaseSelector,
     open_devices: dict[str, int],
+    device_kinds: dict[str, str],
+    failed_devices: dict[str, float],
 ) -> None:
-    current = {path for path in glob.glob("/dev/hidraw*") if is_controller(path)}
+    current: dict[str, str] = {}
+    if ENABLE_STEAM_HID:
+        current.update(
+            {
+                path: "steam-hid"
+                for path in glob.glob("/dev/hidraw*")
+                if is_controller(path)
+            }
+        )
 
-    for path in set(open_devices) - current:
+    if ENABLE_GENERIC_INPUT:
+        for path, device in input_devices().items():
+            if is_gamepad_input_device(device):
+                current[path] = "gamepad-input"
+
+    for path in set(open_devices) - set(current):
         fd = open_devices.pop(path)
+        device_kinds.pop(path, None)
         try:
             selector.unregister(fd)
         except KeyError:
             pass
         os.close(fd)
 
-    for path in sorted(current - set(open_devices)):
+    for path in sorted(set(current) - set(open_devices)):
+        now = time.monotonic()
+        if now - failed_devices.get(path, 0.0) < 60:
+            continue
         try:
             fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK)
             selector.register(fd, selectors.EVENT_READ, path)
             open_devices[path] = fd
-            LOG.info("Monitoring controller at %s", path)
+            device_kinds[path] = current[path]
+            failed_devices.pop(path, None)
+            LOG.info("Monitoring %s controller source at %s", current[path], path)
         except OSError as error:
+            failed_devices[path] = now
             LOG.warning("Cannot monitor %s: %s", path, error)
+
+
+def iter_input_events(data: bytes) -> list[tuple[int, int, int]]:
+    events: list[tuple[int, int, int]] = []
+    for offset in range(0, len(data) - INPUT_EVENT.size + 1, INPUT_EVENT.size):
+        _, _, event_type, code, value = INPUT_EVENT.unpack_from(data, offset)
+        events.append((event_type, code, value))
+    return events
 
 
 def main() -> None:
     selector = selectors.DefaultSelector()
     open_devices: dict[str, int] = {}
+    device_kinds: dict[str, str] = {}
+    failed_devices: dict[str, float] = {}
     startup_deadline = time.monotonic() + STARTUP_BASELINE_SECONDS
 
     button_down: dict[str, bool] = {}
@@ -173,7 +304,7 @@ def main() -> None:
     report_seen_once: set[str] = set()
 
     while True:
-        refresh_devices(selector, open_devices)
+        refresh_devices(selector, open_devices, device_kinds, failed_devices)
 
         for key, _ in selector.select(timeout=5):
             path = key.data
@@ -205,12 +336,27 @@ def main() -> None:
                     pending_short_press.pop(path, None)
                     activate_source("short Steam-button press")
 
-            connected = resumed or (first_report and now >= startup_deadline)
+            connected = (
+                device_kinds.get(path) == "steam-hid"
+                and (resumed or (first_report and now >= startup_deadline))
+            )
             if connected and now - last_activation >= BUTTON_DEBOUNCE_SECONDS:
                 last_activation = now
                 activate_source("controller connected or resumed")
 
             report_seen_once.add(path)
+
+            if device_kinds.get(path) == "gamepad-input":
+                for event_type, code, value in iter_input_events(data):
+                    if event_type != EV_KEY or value != KEY_PRESSED:
+                        continue
+                    if code not in GAMEPAD_HOME_CODES:
+                        continue
+                    if now - last_activation < BUTTON_DEBOUNCE_SECONDS:
+                        continue
+                    last_activation = now
+                    activate_source(f"{GAMEPAD_HOME_CODES[code]} controller button")
+                continue
 
             if len(data) <= BUTTON_BYTE or data[0] != REPORT_ID:
                 continue

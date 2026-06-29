@@ -1,0 +1,125 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+CONFIG_FILE="${STEAMOS_CEC_CONFIG:-/etc/steamos-cec-toolkit.conf}"
+if [[ -r "$CONFIG_FILE" ]]; then
+  # shellcheck disable=SC1090
+  source "$CONFIG_FILE"
+fi
+
+USB_WAKE_MATCH="${USB_WAKE_MATCH:-bluetooth|steam controller|xbox|playstation|dualsense|dualshock|8bitdo|nintendo|shield|santroller}"
+USB_WAKE_EXCLUDE="${USB_WAKE_EXCLUDE:-hub|host controller|keyboard|mouse|touchpad|aura|audio}"
+USB_WAKE_USB_IDS="${USB_WAKE_USB_IDS:-8087:0032}"
+USB_WAKE_BLUETOOTH_CLASS="${USB_WAKE_BLUETOOTH_CLASS:-1}"
+USB_WAKE_STATE_FILE="${USB_WAKE_STATE_FILE:-/var/lib/steamos-cec-toolkit/usb-wake-state}"
+USB_WAKE_STATE="${1:-on}"
+
+case "$USB_WAKE_STATE" in
+  on) target_state="enabled" ;;
+  off) target_state="restore" ;;
+  status) target_state="" ;;
+  *)
+    echo "usage: $0 on|off|status" >&2
+    exit 2
+    ;;
+esac
+
+json_escape() {
+  local value="${1//\\/\\\\}"
+  value="${value//\"/\\\"}"
+  value="${value//$'\n'/ }"
+  printf '"%s"' "$value"
+}
+
+matched=0
+changed=0
+items=()
+
+if [[ "$target_state" == "restore" ]]; then
+  if [[ -r "$USB_WAKE_STATE_FILE" ]]; then
+    while IFS=$'\t' read -r device_dir previous_state; do
+      wakeup="$device_dir/power/wakeup"
+      [[ -e "$wakeup" && -n "$previous_state" ]] || continue
+      before="$(cat "$wakeup" 2>/dev/null || true)"
+      after="$before"
+      matched=$((matched + 1))
+      if [[ "$before" != "$previous_state" ]]; then
+        printf '%s\n' "$previous_state" > "$wakeup"
+        after="$(cat "$wakeup" 2>/dev/null || true)"
+        changed=$((changed + 1))
+      fi
+      items+=("$(printf '{"path":%s,"label":%s,"before":%s,"after":%s}' \
+        "$(json_escape "$device_dir")" \
+        "$(json_escape "restored")" \
+        "$(json_escape "$before")" \
+        "$(json_escape "$after")")")
+    done < "$USB_WAKE_STATE_FILE"
+  fi
+  rm -f "$USB_WAKE_STATE_FILE"
+  printf '{"ok":true,"matched":%d,"changed":%d,"devices":[' "$matched" "$changed"
+  separator=""
+  for item in "${items[@]}"; do
+    printf '%s%s' "$separator" "$item"
+    separator=","
+  done
+  printf ']}\n'
+  exit 0
+fi
+
+if [[ "$target_state" == "enabled" ]]; then
+  install -d -m 0755 "$(dirname "$USB_WAKE_STATE_FILE")"
+  : > "$USB_WAKE_STATE_FILE"
+fi
+
+for wakeup in /sys/bus/usb/devices/*/power/wakeup; do
+  [[ -e "$wakeup" ]] || continue
+  device_dir="${wakeup%/power/wakeup}"
+  product="$(cat "$device_dir/product" 2>/dev/null || true)"
+  vendor_id="$(cat "$device_dir/idVendor" 2>/dev/null || true)"
+  product_id="$(cat "$device_dir/idProduct" 2>/dev/null || true)"
+  device_class="$(cat "$device_dir/bDeviceClass" 2>/dev/null || true)"
+  device_subclass="$(cat "$device_dir/bDeviceSubClass" 2>/dev/null || true)"
+  device_protocol="$(cat "$device_dir/bDeviceProtocol" 2>/dev/null || true)"
+  usb_id="$vendor_id:$product_id"
+  manufacturer="$(cat "$device_dir/manufacturer" 2>/dev/null || true)"
+  label="$manufacturer $product"
+  label_lower="$(printf '%s' "$label" | tr '[:upper:]' '[:lower:]')"
+
+  bluetooth_class_match=0
+  if [[ "$USB_WAKE_BLUETOOTH_CLASS" == 1 && "$device_class" == e0 && "$device_subclass" == 01 && "$device_protocol" == 01 ]]; then
+    bluetooth_class_match=1
+  fi
+
+  if [[ "$bluetooth_class_match" -ne 1 && ! " $USB_WAKE_USB_IDS " =~ " $usb_id " && ! "$label_lower" =~ $USB_WAKE_MATCH ]]; then
+    continue
+  fi
+  if [[ "$label_lower" =~ $USB_WAKE_EXCLUDE ]]; then
+    continue
+  fi
+
+  matched=$((matched + 1))
+  before="$(cat "$wakeup" 2>/dev/null || true)"
+  after="$before"
+  if [[ "$target_state" == "enabled" ]]; then
+    printf '%s\t%s\n' "$device_dir" "$before" >> "$USB_WAKE_STATE_FILE"
+  fi
+  if [[ -n "$target_state" && "$before" != "$target_state" ]]; then
+    printf '%s\n' "$target_state" > "$wakeup"
+    after="$(cat "$wakeup" 2>/dev/null || true)"
+    changed=$((changed + 1))
+  fi
+
+  items+=("$(printf '{"path":%s,"label":%s,"before":%s,"after":%s}' \
+    "$(json_escape "$device_dir")" \
+    "$(json_escape "${label#"${label%%[![:space:]]*}"} ($usb_id)")" \
+    "$(json_escape "$before")" \
+    "$(json_escape "$after")")")
+done
+
+printf '{"ok":true,"matched":%d,"changed":%d,"devices":[' "$matched" "$changed"
+separator=""
+for item in "${items[@]}"; do
+  printf '%s%s' "$separator" "$item"
+  separator=","
+done
+printf ']}\n'

@@ -32,7 +32,9 @@ systemctl --user start cec-audio-control.socket 2>/dev/null || true
 systemctl --user restart wireplumber.service 2>/dev/null || true
 
 sudo systemctl disable --now steamos-cec-before-sleep.service 2>/dev/null || true
+sudo systemctl disable --now steamos-cec-usb-wake.service 2>/dev/null || true
 sudo rm -f /etc/systemd/system/steamos-cec-before-sleep.service
+sudo rm -f /etc/systemd/system/steamos-cec-usb-wake.service
 sudo rm -f /etc/sudoers.d/zz-steamos-cec-toolkit-volume
 sudo rm -rf /var/lib/steamos-cec-toolkit
 sudo systemctl daemon-reload

@@ -19,6 +19,7 @@ CONFIG_FILE = USER_CONFIG_FILE if USER_CONFIG_FILE.exists() else SYSTEM_CONFIG_F
 ROOT_HELPER = Path("/var/lib/steamos-cec-toolkit/steamos-cec-volume-raw")
 DEBUG_HELPER = Path("/var/lib/steamos-cec-toolkit/steamos-cec-debug-monitor")
 POWER_STANDBY_HELPER = Path("/var/lib/steamos-cec-toolkit/steamos-cec-power-standby-control")
+USB_WAKE_HELPER = Path("/var/lib/steamos-cec-toolkit/steamos-cec-usb-wake-control")
 SUDOERS_FILE = Path("/etc/sudoers.d/zz-steamos-cec-toolkit-volume")
 EXTERNAL_VOLUME_SCRIPT = Path.home() / ".local/bin/steamos-cec-external-volume"
 VOLUME_SCRIPT = Path.home() / ".local/bin/steamos-cec-volume"
@@ -88,7 +89,34 @@ USER_SERVICES = {
 
 SYSTEM_SERVICES = {
     "power-standby": "steamos-cec-before-sleep.service",
+    "usb-wake": "steamos-cec-usb-wake.service",
 }
+
+GAMEPAD_NAME_HINTS = (
+    "8bitdo",
+    "controller",
+    "dualsense",
+    "dualshock",
+    "gamepad",
+    "guitar",
+    "joystick",
+    "nintendo",
+    "playstation",
+    "santroller",
+    "shield",
+    "x-box",
+    "xbox",
+)
+NON_GAMEPAD_NAME_HINTS = (
+    "consumer control",
+    "keyboard",
+    "mouse",
+    "power button",
+    "sleep button",
+    "steamos-manager",
+    "system control",
+    "touchpad",
+)
 
 
 def run(command: list[str], timeout: int = 8) -> dict[str, Any]:
@@ -144,6 +172,8 @@ def write_user_config(updates: dict[str, str]) -> None:
         "HDMI_ALSA_CARD_NAME",
         "HDMI_ALSA_CARD_NICK",
         "EXTERNAL_VOLUME_ROUTE",
+        "CONTROLLER_WAKE_GENERIC_INPUT",
+        "CONTROLLER_WAKE_STEAM_HID",
     }
     current = read_config()
     for key, value in updates.items():
@@ -268,6 +298,70 @@ def cached_discovery() -> dict[str, Any] | None:
     return payload if isinstance(payload, dict) else None
 
 
+def input_devices() -> list[dict[str, Any]]:
+    devices: list[dict[str, Any]] = []
+    current: dict[str, str] = {}
+
+    def flush() -> None:
+        if not current:
+            return
+        name = current.get("name", "")
+        phys = current.get("phys", "")
+        handlers = current.get("handlers", "").split()
+        for handler in handlers:
+            if handler.startswith("event"):
+                path = f"/dev/input/{handler}"
+                devices.append(
+                    {
+                        "path": path,
+                        "name": name,
+                        "phys": phys,
+                        "handlers": handlers,
+                        "readable": os.access(path, os.R_OK),
+                        "gamepad": is_gamepad_name(name, handlers),
+                    }
+                )
+
+    try:
+        with Path("/proc/bus/input/devices").open(encoding="utf-8") as file:
+            for raw_line in file:
+                line = raw_line.rstrip("\n")
+                if not line:
+                    flush()
+                    current = {}
+                    continue
+                if line.startswith("N: Name="):
+                    current["name"] = line.split("=", 1)[1].strip().strip('"')
+                elif line.startswith("P: Phys="):
+                    current["phys"] = line.split("=", 1)[1].strip()
+                elif line.startswith("H: Handlers="):
+                    current["handlers"] = line.split("=", 1)[1].strip()
+            flush()
+    except OSError as error:
+        return [{"error": str(error)}]
+    return devices
+
+
+def is_gamepad_name(name: str, handlers: list[str]) -> bool:
+    lower_name = name.lower()
+    if any(hint in lower_name for hint in NON_GAMEPAD_NAME_HINTS):
+        return False
+    if any(handler.startswith("js") for handler in handlers):
+        return True
+    return any(hint in lower_name for hint in GAMEPAD_NAME_HINTS)
+
+
+def discover_input() -> dict[str, Any]:
+    devices = input_devices()
+    gamepads = [device for device in devices if device.get("gamepad")]
+    return {
+        "ok": True,
+        "supported_codes": ["BTN_MODE", "KEY_HOMEPAGE", "KEY_HOME"],
+        "devices": gamepads,
+        "all_input_devices": len(devices),
+    }
+
+
 def external_volume_state() -> dict[str, Any]:
     service = service_state("cec-audio-control.service")
     socket = service_state("cec-audio-control.socket")
@@ -309,10 +403,19 @@ def status() -> dict[str, Any]:
         "root_helper_exists": ROOT_HELPER.exists(),
         "debug_helper_exists": DEBUG_HELPER.exists(),
         "power_standby_helper_exists": POWER_STANDBY_HELPER.exists(),
+        "usb_wake_helper_exists": USB_WAKE_HELPER.exists(),
         "sudoers_exists": SUDOERS_FILE.exists(),
         "external_volume_script_exists": EXTERNAL_VOLUME_SCRIPT.exists(),
         "volume_script_exists": VOLUME_SCRIPT.exists(),
         "external_volume": external_volume_state(),
+        "controller_wake": {
+            "script_exists": (Path.home() / ".local/bin/steamos-cec-steam-button").exists(),
+            "generic_input_enabled": config.get("CONTROLLER_WAKE_GENERIC_INPUT", "1")
+            not in {"0", "false", "False", "no"},
+            "steam_hid_enabled": config.get("CONTROLLER_WAKE_STEAM_HID", "1")
+            not in {"0", "false", "False", "no"},
+            "gamepad_devices": discover_input()["devices"],
+        },
         "services": {name: service_state(unit) for name, unit in USER_SERVICES.items()},
         "system_services": {
             name: system_service_state(unit) for name, unit in SYSTEM_SERVICES.items()
@@ -333,18 +436,23 @@ def set_service(name: str, enabled: bool) -> dict[str, Any]:
 
 
 def set_system_service(name: str, enabled: bool) -> dict[str, Any]:
-    if name != "power-standby":
+    helpers = {
+        "power-standby": POWER_STANDBY_HELPER,
+        "usb-wake": USB_WAKE_HELPER,
+    }
+    if name not in helpers:
         return {"ok": False, "error": f"Unknown system service: {name}"}
-    if not POWER_STANDBY_HELPER.exists():
+    helper = helpers[name]
+    if not helper.exists():
         return {
             "ok": False,
-            "error": "Power standby helper is missing; run the installer/update script first.",
+            "error": f"{name} helper is missing; run the installer/update script first.",
         }
     result = run(
         [
             "sudo",
             "-n",
-            str(POWER_STANDBY_HELPER),
+            str(helper),
             "on" if enabled else "off",
         ],
         timeout=15,
@@ -485,6 +593,7 @@ def main() -> int:
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("status")
     sub.add_parser("discover-cec")
+    sub.add_parser("discover-input")
     set_config_parser = sub.add_parser("set-config")
     set_config_parser.add_argument("updates")
     set_service_parser = sub.add_parser("set-service")
@@ -508,6 +617,8 @@ def main() -> int:
         payload = status()
     elif args.command == "discover-cec":
         payload = discover_cec()
+    elif args.command == "discover-input":
+        payload = discover_input()
     elif args.command == "set-config":
         try:
             updates = json.loads(args.updates)

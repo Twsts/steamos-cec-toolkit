@@ -30,10 +30,12 @@ type Status = {
   root_helper_exists?: boolean;
   debug_helper_exists?: boolean;
   power_standby_helper_exists?: boolean;
+  usb_wake_helper_exists?: boolean;
   sudoers_exists?: boolean;
   external_volume_script_exists?: boolean;
   volume_script_exists?: boolean;
   external_volume?: ExternalVolumeState;
+  controller_wake?: ControllerWakeState;
   services?: Record<string, ServiceState>;
   system_services?: Record<string, ServiceState>;
   action?: {
@@ -46,6 +48,29 @@ type Status = {
     returncode: number;
     stdout: string;
   };
+};
+
+type InputDevice = {
+  path: string;
+  name: string;
+  phys: string;
+  handlers: string[];
+  readable: boolean;
+  gamepad: boolean;
+};
+
+type InputDiscovery = {
+  ok: boolean;
+  supported_codes: string[];
+  devices: InputDevice[];
+  all_input_devices: number;
+};
+
+type ControllerWakeState = {
+  script_exists: boolean;
+  generic_input_enabled: boolean;
+  steam_hid_enabled: boolean;
+  gamepad_devices: InputDevice[];
 };
 
 type CecDevice = {
@@ -69,6 +94,7 @@ type Discovery = {
 
 const getStatus = callable<[], Status>("get_status");
 const discoverCec = callable<[], Discovery>("discover_cec");
+const discoverInput = callable<[], InputDiscovery>("discover_input");
 const setConfig = callable<[Record<string, string>], Status>("set_config");
 const setService = callable<[string, boolean], Status>("set_service");
 const setSystemService = callable<[string, boolean], Status>("set_system_service");
@@ -114,6 +140,7 @@ function CapabilityDetails({ status }: { status: Status | null }) {
       <div>Root helper: {yesNo(status.root_helper_exists)}</div>
       <div>Debug helper: {yesNo(status.debug_helper_exists)}</div>
       <div>Power standby helper: {yesNo(status.power_standby_helper_exists)}</div>
+      <div>USB wake helper: {yesNo(status.usb_wake_helper_exists)}</div>
       <div>Sudoers: {yesNo(status.sudoers_exists)}</div>
       <div>CEC volume buttons: {status.external_volume?.enabled ? "On" : "Off"}</div>
       <div>Relative volume: {status.external_volume?.capabilities_ok ? "OK" : "Inactive"}</div>
@@ -130,6 +157,7 @@ function needsInstallHelp(status: Status | null): boolean {
     !status.root_helper_exists ||
     !status.debug_helper_exists ||
     !status.power_standby_helper_exists ||
+    !status.usb_wake_helper_exists ||
     !status.sudoers_exists ||
     !status.volume_script_exists ||
     !status.external_volume_script_exists
@@ -152,6 +180,9 @@ function missingItems(status: Status | null): string[] {
   }
   if (!status.power_standby_helper_exists) {
     items.push("power standby helper");
+  }
+  if (!status.usb_wake_helper_exists) {
+    items.push("USB wake helper");
   }
   if (!status.volume_script_exists) {
     items.push("volume wrapper");
@@ -206,6 +237,30 @@ function ConfigDetails({ status }: { status: Status | null }) {
   );
 }
 
+function ControllerWakeDetails({ discovery, status }: { discovery: InputDiscovery | null; status: Status | null }) {
+  const devices = discovery?.devices || status?.controller_wake?.gamepad_devices || [];
+  const readable = devices.filter((device) => device.readable).length;
+  const supportedButtons = "Home / Guide / PS / Xbox";
+
+  return (
+    <div style={{ fontSize: "12px", opacity: 0.8, lineHeight: 1.35 }}>
+      <div>Controller wake listens for controller system buttons only.</div>
+      <div>Wake buttons: {supportedButtons}</div>
+      <div>Controllers found: {devices.length ? `${devices.length}, ${readable} readable` : "None detected"}</div>
+      {devices.length > 0 && (
+        <div style={{ marginTop: "6px" }}>
+          {devices.slice(0, 4).map((device) => (
+            <div key={device.path}>
+              {device.name || "Unknown controller"} - {device.readable ? "ready" : "permission needed"}
+            </div>
+          ))}
+        </div>
+      )}
+      <div style={{ marginTop: "6px" }}>Original Steam Controller also uses the built-in HID profile.</div>
+    </div>
+  );
+}
+
 function DebugOutput({ output }: { output: string }) {
   if (!output) {
     return null;
@@ -236,6 +291,7 @@ function DebugOutput({ output }: { output: string }) {
 function Content() {
   const [status, setStatus] = useState<Status | null>(null);
   const [discovery, setDiscovery] = useState<Discovery | null>(null);
+  const [inputDiscovery, setInputDiscovery] = useState<InputDiscovery | null>(null);
   const [debugOutput, setDebugOutput] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -247,6 +303,16 @@ function Content() {
     setBusy(true);
     try {
       setDiscovery(await discoverCec());
+      setStatus(await getStatus());
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const refreshInputDiscovery = async () => {
+    setBusy(true);
+    try {
+      setInputDiscovery(await discoverInput());
       setStatus(await getStatus());
     } finally {
       setBusy(false);
@@ -285,6 +351,7 @@ function Content() {
   const tvStandby = status?.services?.["tv-standby"];
   const gamescopeRecovery = status?.services?.["gamescope-recovery"];
   const powerStandby = status?.system_services?.["power-standby"];
+  const usbWake = status?.system_services?.["usb-wake"];
   const cecVolume = status?.external_volume;
   const installed = !!status?.ok && !!status.root_helper_exists && !!status.volume_script_exists;
   const showInstallHelp = needsInstallHelp(status);
@@ -320,7 +387,7 @@ function Content() {
         <PanelSectionRow>
           <ToggleField
             label="CEC Volume Buttons"
-            description={cecVolume?.enabled ? "SteamOS shows + / - and sends volume over CEC" : "SteamOS uses the normal volume bar"}
+            description="Show SteamOS + / - controls and send volume commands over HDMI-CEC"
             checked={!!cecVolume?.enabled}
             disabled={busy || !installed}
             onChange={(enabled: boolean) => void runAction(() => setExternalVolume(enabled))}
@@ -328,8 +395,8 @@ function Content() {
         </PanelSectionRow>
         <PanelSectionRow>
           <ToggleField
-            label="Steam Button Wakes TV"
-            description="Wake the TV/AVR and select this HDMI input when the Steam button wakes SteamOS"
+            label="Controller Button Wakes TV"
+            description="Use controller Home/Guide buttons to wake the TV/AVR and select this input"
             checked={!!steamButton?.is_enabled}
             disabled={busy}
             onChange={(enabled: boolean) => void runAction(() => setService("steam-button", enabled))}
@@ -338,7 +405,7 @@ function Content() {
         <PanelSectionRow>
           <ToggleField
             label="TV Standby Suspends SteamOS"
-            description="Suspend SteamOS when the TV sends HDMI-CEC standby"
+            description="Suspend SteamOS when the TV broadcasts HDMI-CEC standby"
             checked={!!tvStandby?.is_enabled}
             disabled={busy}
             onChange={(enabled: boolean) => void runAction(() => setService("tv-standby", enabled))}
@@ -347,7 +414,7 @@ function Content() {
         <PanelSectionRow>
           <ToggleField
             label="SteamOS Sleep Turns Off TV"
-            description="Send HDMI-CEC standby when SteamOS suspends or shuts down"
+            description="Send TV standby before SteamOS sleeps or shuts down"
             checked={!!powerStandby?.is_enabled}
             disabled={busy || !status?.power_standby_helper_exists}
             onChange={(enabled: boolean) => void runAction(() => setSystemService("power-standby", enabled))}
@@ -355,8 +422,17 @@ function Content() {
         </PanelSectionRow>
         <PanelSectionRow>
           <ToggleField
+            label="Bluetooth/Controller Wake"
+            description="Allow supported Bluetooth and controller receivers to wake SteamOS from suspend"
+            checked={!!usbWake?.is_enabled}
+            disabled={busy || !status?.usb_wake_helper_exists}
+            onChange={(enabled: boolean) => void runAction(() => setSystemService("usb-wake", enabled))}
+          />
+        </PanelSectionRow>
+        <PanelSectionRow>
+          <ToggleField
             label="Gamescope Recovery"
-            description="Restart Gamescope after input activation if the display gets stuck"
+            description="Restart Gamescope after CEC input activation if the display gets stuck"
             checked={!!gamescopeRecovery?.is_enabled}
             disabled={busy}
             onChange={(enabled: boolean) => void runAction(() => setService("gamescope-recovery", enabled))}
@@ -365,6 +441,14 @@ function Content() {
       </PanelSection>
 
       <PanelSection title="Configuration">
+        <PanelSectionRow>
+          <ButtonItem layout="below" disabled={busy} onClick={() => void refreshInputDiscovery()}>
+            Discover Controllers
+          </ButtonItem>
+        </PanelSectionRow>
+        <PanelSectionRow>
+          <ControllerWakeDetails discovery={inputDiscovery} status={status} />
+        </PanelSectionRow>
         <PanelSectionRow>
           <ButtonItem layout="below" disabled={busy} onClick={() => void refreshDiscovery()}>
             Discover CEC Devices

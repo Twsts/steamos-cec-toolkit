@@ -1,0 +1,11 @@
+[Unit]
+Description=Enable USB wake for SteamOS CEC controller receivers
+After=multi-user.target
+
+[Service]
+Type=oneshot
+ExecStart=/var/lib/steamos-cec-toolkit/steamos-cec-usb-wake-apply on
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

@@ -15,12 +15,15 @@ It was built for a living-room SteamOS box where:
   a normal software volume slider.
 - The `+` / `-` buttons should control the real receiver / soundbar volume over
   HDMI-CEC.
-- A Steam Controller Steam-button press should wake/power on the TV/AVR over
-  HDMI-CEC and switch the active input back to the SteamOS box.
-- Waking or reconnecting the controller should also wake the display chain and
-  activate the SteamOS HDMI source.
+- A controller Home/Guide/Steam-button press should wake/power on the TV/AVR
+  over HDMI-CEC and switch the active input back to the SteamOS box.
+- The original Steam Controller has a HID fallback profile for wake/input
+  switching if Linux does not expose a normal gamepad Home button event.
 - Optional helpers can suspend SteamOS when the TV sends standby and recover
   Gamescope after CEC wake/input switching.
+- Optional USB wake setup can allow supported Bluetooth adapters and controller
+  receivers to wake SteamOS from suspend before the toolkit sends CEC wake/input
+  selection.
 
 The project uses Valve's existing SteamOS CEC daemon (`cecd`) and PipeWire
 ExternalVolume plumbing.
@@ -87,10 +90,11 @@ Known-good reference setup:
 - SteamOS / Steam Deck-style Game Mode on a DIY HTPC.
 - UGREEN DisplayPort-to-HDMI adapter with HDMI-CEC support.
 - TV + AVR/soundbar HDMI-CEC chain.
-- Steam Controller for the Steam-button TV wake/input-switch helper.
+- Gamepad Home/Guide button support through Linux input events.
+- Steam Controller for the Steam Controller HID fallback helper.
 
 Other adapters and controllers may work, but you should verify the CEC topology
-and controller HID report format first.
+and whether the controller exposes a normal gamepad Home/Guide input event.
 
 ## What It Installs
 
@@ -107,6 +111,12 @@ User files:
 ~/.config/wireplumber/wireplumber.conf.d/99-steamos-cec-external-volume.conf
 ```
 
+Controller wake support is passive. It does not remap, inject, block, or grab
+controller input. The generic path watches gamepad-like Linux input devices for
+known system button codes (`BTN_MODE`, `KEY_HOMEPAGE`, `KEY_HOME`) and ignores
+keyboard/mouse devices. The Steam Controller fallback still uses the original
+Steam Controller HID profile.
+
 Root files:
 
 ```text
@@ -114,8 +124,17 @@ Root files:
 /etc/sudoers.d/zz-steamos-cec-toolkit-volume
 /var/lib/steamos-cec-toolkit/steamos-cec-volume-raw
 /var/lib/steamos-cec-toolkit/steamos-cec-before-sleep
+/var/lib/steamos-cec-toolkit/steamos-cec-usb-wake-apply
 /etc/systemd/system/steamos-cec-before-sleep.service
+/etc/systemd/system/steamos-cec-usb-wake.service
 ```
+
+USB/Bluetooth wake from suspend depends on the USB/Bluetooth adapter, firmware,
+kernel, and controller. The toolkit can enable Linux USB wakeup for matching
+Bluetooth/controller receivers, but it cannot make unsupported hardware wake the
+PC from suspend. By default it matches USB Bluetooth radios by Bluetooth device
+class, controller receiver names, and a small known-safe USB ID list for devices
+that do not expose a readable product name.
 
 ## SteamOS Updates and Recovery
 
@@ -413,11 +432,12 @@ particular, some receivers accept volume only from the TV logical address while
 others may accept it from the SteamOS playback address. HDMI/WirePlumber card
 matching can also vary by GPU, adapter, and distro image.
 
-## Steam Button TV Wake and Input Switching
+## Controller Wake and Input Switching
 
-The `steamos-cec-steam-button` service watches the Steam Controller HID reports.
-It wakes/powers on the TV/AVR chain and activates the SteamOS HDMI source by
-calling SteamOS `cecd`:
+The `steamos-cec-steam-button` service watches controller Home/Guide input
+events from gamepad-like Linux input devices. It also keeps the original Steam
+Controller HID profile as a fallback. When triggered, it wakes/powers on the
+TV/AVR chain and activates the SteamOS HDMI source by calling SteamOS `cecd`:
 
 ```bash
 busctl --user call \
@@ -429,8 +449,9 @@ busctl --user call \
 
 It triggers on:
 
-- controller connect/resume
-- a short Steam-button press
+- supported controller Home/Guide button events
+- original Steam Controller connect/resume
+- original Steam Controller short Steam-button press
 
 On a working CEC topology this is the same behavior users expect from a console:
 press the controller button, the display wakes, the AVR/TV selects the SteamOS

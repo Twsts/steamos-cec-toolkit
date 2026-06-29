@@ -9,6 +9,7 @@ enable_steam_button=0
 enable_tv_standby=0
 enable_gamescope_recovery=0
 enable_before_sleep=0
+enable_usb_wake=0
 restart_services=1
 
 usage() {
@@ -20,6 +21,7 @@ Options:
   --enable-tv-standby-suspend   Suspend SteamOS when the TV broadcasts HDMI-CEC standby
   --enable-gamescope-recovery   Restart Gamescope after CEC source activation if the display gets stuck
   --enable-before-sleep         Send HDMI-CEC standby before SteamOS sleeps (system service)
+  --enable-usb-wake             Enable USB wake for Bluetooth/controller receivers (system service)
   --no-external-volume          Do not install the PipeWire ExternalVolume integration
   --no-restart                  Install files but do not restart user services
   -h, --help                    Show this help
@@ -35,6 +37,7 @@ while [[ $# -gt 0 ]]; do
     --enable-tv-standby-suspend) enable_tv_standby=1 ;;
     --enable-gamescope-recovery) enable_gamescope_recovery=1 ;;
     --enable-before-sleep) enable_before_sleep=1 ;;
+    --enable-usb-wake) enable_usb_wake=1 ;;
     --no-external-volume) enable_external_volume=0 ;;
     --no-restart) restart_services=0 ;;
     -h|--help) usage; exit 0 ;;
@@ -97,14 +100,21 @@ sudo install -m 0755 "$PROJECT_DIR/bin/steamos-cec-power-standby-control" \
   /var/lib/steamos-cec-toolkit/steamos-cec-power-standby-control
 sudo install -m 0755 "$PROJECT_DIR/bin/steamos-cec-before-sleep" \
   /var/lib/steamos-cec-toolkit/steamos-cec-before-sleep
+sudo install -m 0755 "$PROJECT_DIR/bin/steamos-cec-usb-wake-apply" \
+  /var/lib/steamos-cec-toolkit/steamos-cec-usb-wake-apply
+sudo install -m 0755 "$PROJECT_DIR/bin/steamos-cec-usb-wake-control" \
+  /var/lib/steamos-cec-toolkit/steamos-cec-usb-wake-control
 sudo install -D -m 0644 "$PROJECT_DIR/systemd/system/steamos-cec-before-sleep.service" \
   /etc/systemd/system/steamos-cec-before-sleep.service
+sudo install -D -m 0644 "$PROJECT_DIR/systemd/system/steamos-cec-usb-wake.service" \
+  /etc/systemd/system/steamos-cec-usb-wake.service
 
 sudoers_tmp="$(mktemp)"
 {
   printf '%s ALL=(root) NOPASSWD: /var/lib/steamos-cec-toolkit/steamos-cec-volume-raw *\n' "$(id -un)"
   printf '%s ALL=(root) NOPASSWD: /var/lib/steamos-cec-toolkit/steamos-cec-debug-monitor *\n' "$(id -un)"
   printf '%s ALL=(root) NOPASSWD: /var/lib/steamos-cec-toolkit/steamos-cec-power-standby-control *\n' "$(id -un)"
+  printf '%s ALL=(root) NOPASSWD: /var/lib/steamos-cec-toolkit/steamos-cec-usb-wake-control *\n' "$(id -un)"
 } > "$sudoers_tmp"
 sudo install -m 0440 "$sudoers_tmp" /etc/sudoers.d/zz-steamos-cec-toolkit-volume
 rm -f "$sudoers_tmp"
@@ -167,6 +177,10 @@ if [[ "$enable_before_sleep" -eq 1 ]]; then
   sudo systemctl enable steamos-cec-before-sleep.service
 else
   sudo systemctl daemon-reload
+fi
+if [[ "$enable_usb_wake" -eq 1 ]]; then
+  sudo systemctl daemon-reload
+  sudo systemctl enable --now steamos-cec-usb-wake.service
 fi
 
 if [[ "$restart_services" -eq 1 ]]; then

@@ -23,14 +23,26 @@ HDMI_ALSA_CARD_NICK="HDA ATI HDMI"
 EXTERNAL_VOLUME_DEVICE=HDMI
 EXTERNAL_VOLUME_ROUTE=hdmi-output-0
 
-# Steam Controller / Steam button source activation.
-# Default is the original Steam Controller HID ID. Other controllers may need
-# different report parsing or should keep this service disabled.
+# Controller Home/Guide button source activation.
+# Generic input support listens only to gamepad-like /dev/input/event devices
+# and only reacts to known system button codes: BTN_MODE, KEY_HOMEPAGE, KEY_HOME.
+# Steam HID support keeps the original Steam Controller fallback below.
+CONTROLLER_WAKE_GENERIC_INPUT=1
+CONTROLLER_WAKE_STEAM_HID=1
 STEAM_BUTTON_HID_ID=0003:000028DE:00001304
 STEAM_BUTTON_EXCLUDED_PHYS=input6
 STEAM_BUTTON_REPORT_ID=0x45
 STEAM_BUTTON_BYTE=4
 STEAM_BUTTON_MASK=0x01
+
+# Optional USB wake from suspend support.
+# This enables /sys/.../power/wakeup only for USB devices whose manufacturer or
+# product names match controller/Bluetooth-related terms and do not match
+# obvious hub/keyboard/mouse/audio exclusions.
+USB_WAKE_MATCH="bluetooth|steam controller|xbox|playstation|dualsense|dualshock|8bitdo|nintendo|shield|santroller"
+USB_WAKE_EXCLUDE="hub|host controller|keyboard|mouse|touchpad|aura|audio"
+USB_WAKE_USB_IDS="8087:0032"
+USB_WAKE_BLUETOOTH_CLASS=1
 
 # Optional TV standby suspend service.
 TV_LOGICAL_ADDRESS=0

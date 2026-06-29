@@ -80,6 +80,7 @@ enable_steam_button=0
 enable_tv_standby=0
 enable_gamescope_recovery=0
 enable_before_sleep=0
+enable_usb_wake=0
 
 if ask_yes_no "Enable Steam button/controller wake and input switching?" yes; then
   enable_steam_button=1
@@ -89,6 +90,9 @@ if ask_yes_no "Enable TV standby suspends SteamOS?" no; then
 fi
 if ask_yes_no "Enable SteamOS sleep/shutdown turns off TV?" yes; then
   enable_before_sleep=1
+fi
+if ask_yes_no "Enable Bluetooth/controller wake from suspend?" no; then
+  enable_usb_wake=1
 fi
 if ask_yes_no "Enable Gamescope recovery after CEC input activation?" no; then
   enable_gamescope_recovery=1
@@ -126,6 +130,9 @@ if [[ "$enable_gamescope_recovery" -eq 1 ]]; then
 fi
 if [[ "$enable_before_sleep" -eq 1 ]]; then
   install_args+=(--enable-before-sleep)
+fi
+if [[ "$enable_usb_wake" -eq 1 ]]; then
+  install_args+=(--enable-usb-wake)
 fi
 
 step "Installing CEC toolkit"

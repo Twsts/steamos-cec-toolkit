@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+UNIT="steamos-cec-usb-wake.service"
+HELPER="/var/lib/steamos-cec-toolkit/steamos-cec-usb-wake-apply"
+UNIT_FILE="/etc/systemd/system/$UNIT"
+
+case "${1:-}" in
+  on)
+    if [[ ! -x "$HELPER" || ! -f "$UNIT_FILE" ]]; then
+      echo "missing $HELPER or $UNIT_FILE" >&2
+      exit 1
+    fi
+    systemctl daemon-reload
+    "$HELPER" on >/dev/null
+    systemctl enable "$UNIT"
+    ;;
+  off)
+    if [[ -x "$HELPER" ]]; then
+      "$HELPER" off >/dev/null || true
+    fi
+    systemctl disable "$UNIT" >/dev/null 2>&1 || true
+    systemctl daemon-reload
+    ;;
+  status)
+    active="$(systemctl is-active "$UNIT" 2>/dev/null || true)"
+    enabled="$(systemctl is-enabled "$UNIT" 2>/dev/null || true)"
+    helper_status="{}"
+    if [[ -x "$HELPER" ]]; then
+      helper_status="$("$HELPER" status 2>/dev/null || printf '{}')"
+    fi
+    printf '{"active":"%s","enabled":"%s","is_active":%s,"is_enabled":%s,"helper":%s}\n' \
+      "$active" \
+      "$enabled" \
+      "$([[ "$active" == active ]] && echo true || echo false)" \
+      "$([[ "$enabled" == enabled ]] && echo true || echo false)" \
+      "$helper_status"
+    ;;
+  *)
+    echo "usage: $0 on|off|status" >&2
+    exit 2
+    ;;
+esac
