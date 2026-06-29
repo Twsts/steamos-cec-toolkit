@@ -21,6 +21,9 @@ CEC_DEVICE_INTERFACE = "com.steampowered.CecDaemon1.CecDevice1"
 DEFAULT_CONFIG = "/etc/steamos-cec-toolkit.conf"
 
 BUTTON_DEBOUNCE_SECONDS = 2
+RESUME_ACTIVATION_COOLDOWN_SECONDS = 45
+SUSPEND_GAP_SECONDS = 10
+HID_RESUME_WINDOW_SECONDS = 60
 REPORT_RESUME_SECONDS = 3
 STARTUP_BASELINE_SECONDS = 2
 SHORT_PRESS_MAX_SECONDS = 1.5
@@ -241,6 +244,10 @@ def source_is_active() -> bool:
 
 
 def activate_source(reason: str) -> None:
+    if source_is_active():
+        LOG.info("CEC source is already active; skipping HDMI source activation (%s)", reason)
+        return
+
     for attempt, delay in enumerate((0, 2, 3), start=1):
         if delay:
             time.sleep(delay)
@@ -315,24 +322,56 @@ def iter_input_events(data: bytes) -> list[tuple[int, int, int]]:
     return events
 
 
+def update_system_resume_window(
+    previous_wall: float,
+    previous_monotonic: float,
+    resume_window_until: float,
+) -> tuple[float, float, float]:
+    wall_now = time.time()
+    monotonic_now = time.monotonic()
+    suspended_for = (wall_now - previous_wall) - (monotonic_now - previous_monotonic)
+    if suspended_for >= SUSPEND_GAP_SECONDS:
+        resume_window_until = monotonic_now + HID_RESUME_WINDOW_SECONDS
+        LOG.info(
+            "Detected system resume after %.1fs suspend; allowing Steam HID resume wake for %.0fs",
+            suspended_for,
+            HID_RESUME_WINDOW_SECONDS,
+        )
+    return wall_now, monotonic_now, resume_window_until
+
+
 def main() -> None:
     selector = selectors.DefaultSelector()
     open_devices: dict[str, int] = {}
     device_kinds: dict[str, str] = {}
     failed_devices: dict[str, float] = {}
     startup_deadline = time.monotonic() + STARTUP_BASELINE_SECONDS
+    last_wall = time.time()
+    last_monotonic = time.monotonic()
+    hid_resume_window_until = 0.0
 
     button_down: dict[str, bool] = {}
     button_pressed_at: dict[str, float] = {}
     pending_short_press: dict[str, tuple[float, int]] = {}
     last_activation = 0.0
+    last_resume_activation = 0.0
     last_report_seen: dict[str, float] = {}
     report_seen_once: set[str] = set()
 
     while True:
+        last_wall, last_monotonic, hid_resume_window_until = update_system_resume_window(
+            last_wall,
+            last_monotonic,
+            hid_resume_window_until,
+        )
         refresh_devices(selector, open_devices, device_kinds, failed_devices)
 
         for key, _ in selector.select(timeout=5):
+            last_wall, last_monotonic, hid_resume_window_until = update_system_resume_window(
+                last_wall,
+                last_monotonic,
+                hid_resume_window_until,
+            )
             path = key.data
             try:
                 data = os.read(key.fileobj, 4096)
@@ -365,9 +404,14 @@ def main() -> None:
             connected = (
                 device_kinds.get(path) == "steam-hid"
                 and (resumed or (first_report and now >= startup_deadline))
+                and now <= hid_resume_window_until
             )
-            if connected and now - last_activation >= BUTTON_DEBOUNCE_SECONDS:
+            if (
+                connected
+                and now - last_resume_activation >= RESUME_ACTIVATION_COOLDOWN_SECONDS
+            ):
                 last_activation = now
+                last_resume_activation = now
                 activate_source("controller connected or resumed")
 
             report_seen_once.add(path)

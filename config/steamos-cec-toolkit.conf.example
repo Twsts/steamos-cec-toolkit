@@ -50,3 +50,4 @@ CEC_STANDBY_OPCODE=0x36
 
 # Optional Gamescope recovery service after CEC source activation.
 GAMESCOPE_CONNECTOR_STATUS=/sys/class/drm/card0-DP-1/status
+GAMESCOPE_RECOVER_AFTER_RESUME=1

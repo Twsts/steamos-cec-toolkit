@@ -518,10 +518,16 @@ it can restart `gamescope-session.target` after a short delay. This is useful on
 some HTPC setups where switching back to the SteamOS input leaves Game Mode in a
 bad display state.
 
+When enabled, the same service also runs one cooldown-protected recovery after
+system resume. This handles cases where SteamOS wakes from a Bluetooth/controller
+event, CEC already thinks the SteamOS source is active, but the TV still shows no
+video.
+
 Configure the connector status path in:
 
 ```bash
 GAMESCOPE_CONNECTOR_STATUS=/sys/class/drm/card0-DP-1/status
+GAMESCOPE_RECOVER_AFTER_RESUME=1
 ```
 
 ## Logs

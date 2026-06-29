@@ -188,10 +188,11 @@ function ConfigDetails({ status }) {
 function ControllerWakeDetails({ discovery, status }) {
     const devices = discovery?.devices || status?.controller_wake?.gamepad_devices || [];
     const hidDevices = discovery?.hid_fallback_devices || status?.controller_wake?.hid_fallback_devices || [];
-    const readable = devices.filter((device) => device.readable).length;
+    devices.filter((device) => device.readable).length;
     const supportedButtons = "Home / Guide / PS / Xbox";
     const total = devices.length + hidDevices.length;
-    return (SP_JSX.jsxs("div", { style: { fontSize: "12px", opacity: 0.8, lineHeight: 1.35 }, children: [SP_JSX.jsx("div", { children: "Controller wake listens for controller system buttons only." }), SP_JSX.jsxs("div", { children: ["Wake buttons: ", supportedButtons] }), SP_JSX.jsxs("div", { children: ["Controllers found: ", total ? `${total}, ${readable + hidDevices.length} ready` : "None detected"] }), (devices.length > 0 || hidDevices.length > 0) && (SP_JSX.jsxs("div", { style: { marginTop: "6px" }, children: [devices.slice(0, 4).map((device) => (SP_JSX.jsxs("div", { children: [device.display_name || device.name || "Unknown controller", " - ", device.readable ? "ready" : "permission needed"] }, device.path))), hidDevices.slice(0, 2).map((device) => (SP_JSX.jsxs("div", { children: [device.display_name || device.name, " - HID fallback ready"] }, device.path)))] })), SP_JSX.jsx("div", { style: { marginTop: "6px" }, children: "Steam Controller uses the built-in HID fallback when needed." })] }));
+    const needsPermission = devices.some((device) => !device.readable);
+    return (SP_JSX.jsxs("div", { style: { fontSize: "12px", opacity: 0.8, lineHeight: 1.35 }, children: [SP_JSX.jsxs("div", { children: ["Uses controller system buttons: ", supportedButtons] }), SP_JSX.jsx("div", { children: total ? `Found controllers: ${total}` : "No controllers detected" }), (devices.length > 0 || hidDevices.length > 0) && (SP_JSX.jsxs("div", { style: { marginTop: "6px" }, children: [devices.slice(0, 4).map((device) => (SP_JSX.jsxs("div", { children: [device.display_name || device.name || "Unknown controller", device.readable ? "" : " - permission needed"] }, device.path))), hidDevices.slice(0, 2).map((device) => (SP_JSX.jsx("div", { children: device.display_name || device.name }, device.path)))] })), needsPermission && (SP_JSX.jsx("div", { style: { marginTop: "6px" }, children: "Some controllers need input permissions." }))] }));
 }
 function DebugOutput({ output }) {
     if (!output) {

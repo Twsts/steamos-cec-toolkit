@@ -10,6 +10,7 @@ import os
 import time
 from pathlib import Path
 
+from dbus_next import BusType
 from dbus_next.aio import MessageBus
 
 
@@ -17,6 +18,9 @@ BUS_NAME = "com.steampowered.CecDaemon1"
 DEVICE_PATH = "/com/steampowered/CecDaemon1/Devices/Cec0"
 DEVICE_INTERFACE = "com.steampowered.CecDaemon1.CecDevice1"
 PROPERTIES_INTERFACE = "org.freedesktop.DBus.Properties"
+LOGIN1_BUS_NAME = "org.freedesktop.login1"
+LOGIN1_PATH = "/org/freedesktop/login1"
+LOGIN1_INTERFACE = "org.freedesktop.login1.Manager"
 DEFAULT_CONFIG = "/etc/steamos-cec-toolkit.conf"
 RECOVERY_DELAY_SECONDS = 3
 RECOVERY_COOLDOWN_SECONDS = 30
@@ -44,6 +48,12 @@ CONFIG = read_config(os.environ.get("STEAMOS_CEC_CONFIG", DEFAULT_CONFIG))
 CONNECTOR_STATUS = Path(
     CONFIG.get("GAMESCOPE_CONNECTOR_STATUS", "/sys/class/drm/card0-DP-1/status")
 )
+RECOVER_AFTER_RESUME = CONFIG.get("GAMESCOPE_RECOVER_AFTER_RESUME", "1") not in {
+    "0",
+    "false",
+    "False",
+    "no",
+}
 
 
 async def command(*args: str) -> tuple[int, str]:
@@ -56,7 +66,7 @@ async def command(*args: str) -> tuple[int, str]:
     return process.returncode, stdout.decode(errors="replace").strip()
 
 
-async def recover_gamescope() -> None:
+async def recover_gamescope(reason: str) -> None:
     await asyncio.sleep(RECOVERY_DELAY_SECONDS)
 
     if CONNECTOR_STATUS.exists() and CONNECTOR_STATUS.read_text().strip() != "connected":
@@ -70,7 +80,7 @@ async def recover_gamescope() -> None:
         LOG.info("Gaming Mode is not active; skipping Gamescope recovery")
         return
 
-    LOG.info("CEC source became active; restarting Gamescope session target")
+    LOG.info("Restarting Gamescope session target (%s)", reason)
     returncode, output = await command(
         "systemctl", "--user", "restart", "gamescope-session.target"
     )
@@ -81,18 +91,31 @@ async def recover_gamescope() -> None:
     LOG.info("Gamescope recovery completed")
 
 
-async def monitor() -> None:
+def schedule_recovery(state: dict[str, object], reason: str) -> None:
+    now = time.monotonic()
+    last_recovery = float(state.get("last_recovery", 0.0))
+    if now - last_recovery < RECOVERY_COOLDOWN_SECONDS:
+        LOG.info("Recovery suppressed by cooldown (%s)", reason)
+        return
+
+    task = state.get("task")
+    if task is not None and not task.done():
+        LOG.info("Recovery already pending (%s)", reason)
+        return
+
+    LOG.info("Scheduling Gamescope recovery (%s)", reason)
+    state["last_recovery"] = now
+    state["task"] = asyncio.create_task(recover_gamescope(reason))
+
+
+async def monitor_cec(state: dict[str, object]) -> None:
     bus = await MessageBus().connect()
     introspection = await bus.introspect(BUS_NAME, DEVICE_PATH)
     proxy = bus.get_proxy_object(BUS_NAME, DEVICE_PATH, introspection)
     properties = proxy.get_interface(PROPERTIES_INTERFACE)
 
     active_variant = await properties.call_get(DEVICE_INTERFACE, "Active")
-    state = {
-        "active": bool(active_variant.value),
-        "last_recovery": 0.0,
-        "task": None,
-    }
+    state["active"] = bool(active_variant.value)
     LOG.info("Monitoring CEC Active state; initial state=%s", state["active"])
 
     def properties_changed(interface_name, changed, _invalidated):
@@ -107,20 +130,34 @@ async def monitor() -> None:
         if not active or previous:
             return
 
-        now = time.monotonic()
-        if now - state["last_recovery"] < RECOVERY_COOLDOWN_SECONDS:
-            LOG.info("Recovery suppressed by cooldown")
-            return
-
-        task = state["task"]
-        if task is not None and not task.done():
-            LOG.info("Recovery already pending")
-            return
-
-        state["last_recovery"] = now
-        state["task"] = asyncio.create_task(recover_gamescope())
+        schedule_recovery(state, "CEC source became active")
 
     properties.on_properties_changed(properties_changed)
+    await asyncio.get_running_loop().create_future()
+
+
+async def monitor_sleep(state: dict[str, object]) -> None:
+    if not RECOVER_AFTER_RESUME:
+        LOG.info("Resume recovery disabled by config")
+        await asyncio.get_running_loop().create_future()
+
+    try:
+        bus = await MessageBus(bus_type=BusType.SYSTEM).connect()
+        introspection = await bus.introspect(LOGIN1_BUS_NAME, LOGIN1_PATH)
+        proxy = bus.get_proxy_object(LOGIN1_BUS_NAME, LOGIN1_PATH, introspection)
+        manager = proxy.get_interface(LOGIN1_INTERFACE)
+    except Exception as error:
+        LOG.warning("Cannot monitor system resume: %s", error)
+        await asyncio.get_running_loop().create_future()
+
+    def prepare_for_sleep(sleeping):
+        LOG.info("PrepareForSleep sleeping=%s", sleeping)
+        if sleeping:
+            return
+        schedule_recovery(state, "system resumed")
+
+    manager.on_prepare_for_sleep(prepare_for_sleep)
+    LOG.info("Monitoring system resume for Gamescope recovery")
     await asyncio.get_running_loop().create_future()
 
 
@@ -130,9 +167,14 @@ async def main() -> None:
     args = parser.parse_args()
 
     if args.recover_now:
-        await recover_gamescope()
+        await recover_gamescope("manual")
     else:
-        await monitor()
+        state: dict[str, object] = {
+            "active": False,
+            "last_recovery": 0.0,
+            "task": None,
+        }
+        await asyncio.gather(monitor_cec(state), monitor_sleep(state))
 
 
 if __name__ == "__main__":

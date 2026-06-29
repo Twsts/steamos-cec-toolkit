@@ -257,27 +257,29 @@ function ControllerWakeDetails({ discovery, status }: { discovery: InputDiscover
   const readable = devices.filter((device) => device.readable).length;
   const supportedButtons = "Home / Guide / PS / Xbox";
   const total = devices.length + hidDevices.length;
+  const needsPermission = devices.some((device) => !device.readable);
 
   return (
     <div style={{ fontSize: "12px", opacity: 0.8, lineHeight: 1.35 }}>
-      <div>Controller wake listens for controller system buttons only.</div>
-      <div>Wake buttons: {supportedButtons}</div>
-      <div>Controllers found: {total ? `${total}, ${readable + hidDevices.length} ready` : "None detected"}</div>
+      <div>Uses controller system buttons: {supportedButtons}</div>
+      <div>{total ? `Found controllers: ${total}` : "No controllers detected"}</div>
       {(devices.length > 0 || hidDevices.length > 0) && (
         <div style={{ marginTop: "6px" }}>
           {devices.slice(0, 4).map((device) => (
             <div key={device.path}>
-              {device.display_name || device.name || "Unknown controller"} - {device.readable ? "ready" : "permission needed"}
+              {device.display_name || device.name || "Unknown controller"}{device.readable ? "" : " - permission needed"}
             </div>
           ))}
           {hidDevices.slice(0, 2).map((device) => (
             <div key={device.path}>
-              {device.display_name || device.name} - HID fallback ready
+              {device.display_name || device.name}
             </div>
           ))}
         </div>
       )}
-      <div style={{ marginTop: "6px" }}>Steam Controller uses the built-in HID fallback when needed.</div>
+      {needsPermission && (
+        <div style={{ marginTop: "6px" }}>Some controllers need input permissions.</div>
+      )}
     </div>
   );
 }
