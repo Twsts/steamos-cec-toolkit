@@ -324,6 +324,7 @@ def input_devices() -> list[dict[str, Any]]:
                         "bus": bus,
                         "vendor": vendor,
                         "product": product,
+                        "display_name": controller_display_name(name, vendor, product, bus),
                         "handlers": handlers,
                         "readable": os.access(path, os.R_OK),
                         "gamepad": is_gamepad_name(name, handlers, vendor, product),
@@ -360,6 +361,36 @@ def input_devices() -> list[dict[str, Any]]:
     return devices
 
 
+def controller_display_name(name: str, vendor: str, product: str, bus: str) -> str:
+    clean_name = clean_controller_name(name)
+    known = {
+        ("054c", "0ce6"): "DualSense / PS5 Controller",
+        ("054c", "09cc"): "DualShock 4 / PS4 Controller",
+        ("054c", "05c4"): "DualShock 4 / PS4 Controller",
+        ("054c", "0ba0"): "DualShock 4 USB Wireless Adapter",
+        ("2002", "9000"): "8BitDo NES30 Pro",
+    }
+    if (vendor, product) in known:
+        return known[(vendor, product)]
+    if vendor == "054c" and clean_name == "Wireless Controller":
+        return "PlayStation Controller"
+    if vendor == "28de" and product == "1304":
+        return "Steam Controller"
+    if bus == "0005" and clean_name:
+        return f"{clean_name} (Bluetooth)"
+    return clean_name or "Unknown controller"
+
+
+def clean_controller_name(name: str) -> str:
+    clean_name = " ".join(name.split())
+    parts = clean_name.split()
+    if len(parts) % 2 == 0:
+        half = len(parts) // 2
+        if parts[:half] == parts[half:]:
+            return " ".join(parts[:half])
+    return clean_name
+
+
 def is_gamepad_name(
     name: str,
     handlers: list[str],
@@ -385,8 +416,42 @@ def discover_input() -> dict[str, Any]:
         "ok": True,
         "supported_codes": ["BTN_MODE", "KEY_HOMEPAGE", "KEY_HOME"],
         "devices": gamepads,
+        "hid_fallback_devices": steam_hid_fallback_devices(),
         "all_input_devices": len(devices),
     }
+
+
+def steam_hid_fallback_devices() -> list[dict[str, str]]:
+    config = read_config()
+    expected_hid_id = config.get("STEAM_BUTTON_HID_ID", "0003:000028DE:00001304").lower()
+    excluded_phys = config.get("STEAM_BUTTON_EXCLUDED_PHYS", "input6").lower()
+    devices: dict[str, dict[str, str]] = {}
+
+    for path in sorted(Path("/sys/class/hidraw").glob("hidraw*/device/uevent")):
+        properties: dict[str, str] = {}
+        try:
+            for raw_line in path.read_text(encoding="utf-8").splitlines():
+                key, separator, value = raw_line.partition("=")
+                if separator:
+                    properties[key] = value
+        except OSError:
+            continue
+
+        hid_id = properties.get("HID_ID", "").lower()
+        hid_phys = properties.get("HID_PHYS", "").lower()
+        if expected_hid_id not in hid_id or excluded_phys in hid_phys:
+            continue
+
+        name = properties.get("HID_NAME", "Steam Controller")
+        key = f"{hid_id}:{name}"
+        devices[key] = {
+            "name": name,
+            "display_name": "Steam Controller",
+            "path": f"/dev/{path.parent.parent.name}",
+            "method": "Steam Controller HID fallback",
+        }
+
+    return list(devices.values())
 
 
 def external_volume_state() -> dict[str, Any]:
@@ -442,6 +507,7 @@ def status() -> dict[str, Any]:
             "steam_hid_enabled": config.get("CONTROLLER_WAKE_STEAM_HID", "1")
             not in {"0", "false", "False", "no"},
             "gamepad_devices": discover_input()["devices"],
+            "hid_fallback_devices": steam_hid_fallback_devices(),
         },
         "services": {name: service_state(unit) for name, unit in USER_SERVICES.items()},
         "system_services": {
