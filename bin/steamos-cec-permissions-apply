@@ -22,6 +22,11 @@ CEC_DEVICE="${CEC_DEVICE:-/dev/cec0}"
 apply_one() {
   local device="$1"
   [[ -e "$device" ]] || return 0
+  [[ -c "$device" ]] || return 0
+  [[ "$device" =~ ^/dev/cec[0-9]+$ ]] || {
+    echo "refusing non-CEC device path: $device" >&2
+    return 2
+  }
 
   if command -v setfacl >/dev/null 2>&1; then
     setfacl -m "u:${STEAMOS_CEC_USER}:rw" "$device"

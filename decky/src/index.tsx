@@ -146,6 +146,7 @@ const mute = callable<[], Status>("mute");
 const wakeTv = callable<[], Status>("wake_tv");
 const standbyTv = callable<[], Status>("standby_tv");
 const restartExternalVolume = callable<[], Status>("restart_external_volume");
+const repairCecPermissions = callable<[], Status>("repair_cec_permissions");
 const debugCec = callable<[number], Status>("debug_cec");
 
 function yesNo(value: boolean | undefined): string {
@@ -162,8 +163,11 @@ function overallLine(status: Status | null): string {
   if (!status.root_helper_exists || !status.sudoers_exists) {
     return "Bootstrap incomplete: root helper or sudoers rule is missing.";
   }
+  if (!status.cec_device?.exists) {
+    return `CEC adapter ${status.cec_device?.device || "/dev/cec0"} was not found. Check the adapter or run Discover CEC Devices.`;
+  }
   if (!status.cec_device?.readable || !status.cec_device?.writable) {
-    return "CEC device is not accessible; rerun the installer or repair permissions.";
+    return `CEC adapter ${status.cec_device.device} needs permission repair.`;
   }
   if (!status.external_volume?.enabled) {
     return "CEC volume buttons are off; SteamOS should use the normal volume bar.";
@@ -247,20 +251,38 @@ function missingItems(status: Status | null): string[] {
   return items;
 }
 
-function InstallHelp({ status }: { status: Status | null }) {
+function InstallHelp({ status, busy, onRepairPermissions }: {
+  status: Status | null;
+  busy: boolean;
+  onRepairPermissions: () => void;
+}) {
   const items = missingItems(status);
-  const command = "git clone https://github.com/Twsts/steamos-cec-toolkit.git && cd steamos-cec-toolkit && ./install.sh --enable-steam-button";
+  const command = "bash <(curl -fsSL https://github.com/Twsts/steamos-cec-toolkit/releases/latest/download/steamos-cec-toolkit-installer.sh)";
+  const canRepairPermissions = !!status?.cec_permissions_helper_exists && !!status.cec_device?.exists;
+  const permissionProblem = !!status?.cec_device?.exists && (!status.cec_device?.readable || !status.cec_device?.writable);
 
   return (
-    <PanelSection title="Install">
+    <PanelSection title="Install / Repair">
       <PanelSectionRow>
         <div style={{ fontSize: "12px", opacity: 0.8, lineHeight: 1.35 }}>
           <div>Missing: {items.length ? items.join(", ") : "toolkit bootstrap"}</div>
-          <div style={{ marginTop: "6px" }}>Run from Desktop/SSH:</div>
+          {permissionProblem && (
+            <div style={{ marginTop: "6px" }}>
+              CEC actions need read/write access to {status?.cec_device?.device}. Try repair here first.
+            </div>
+          )}
+          <div style={{ marginTop: "6px" }}>If repair is unavailable or does not fix it, run from Desktop/SSH:</div>
           <code style={{ display: "block", whiteSpace: "normal", marginTop: "4px" }}>{command}</code>
-          <div style={{ marginTop: "6px" }}>Use README options to enable TV standby or Gamescope recovery.</div>
+          <div style={{ marginTop: "6px" }}>The installer keeps your Decky configuration and refreshes root helpers.</div>
         </div>
       </PanelSectionRow>
+      {permissionProblem && canRepairPermissions && (
+        <PanelSectionRow>
+          <ButtonItem layout="below" disabled={busy} onClick={onRepairPermissions}>
+            Repair CEC Permissions
+          </ButtonItem>
+        </PanelSectionRow>
+      )}
     </PanelSection>
   );
 }
@@ -487,7 +509,11 @@ function Content() {
       </PanelSection>
 
       {showInstallHelp && (
-        <InstallHelp status={status} />
+        <InstallHelp
+          status={status}
+          busy={busy}
+          onRepairPermissions={() => void runAction(repairCecPermissions)}
+        />
       )}
 
       <PanelSection title="Features">

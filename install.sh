@@ -129,6 +129,7 @@ sudoers_tmp="$(mktemp)"
   printf '%s ALL=(root) NOPASSWD: /var/lib/steamos-cec-toolkit/steamos-cec-debug-monitor *\n' "$(id -un)"
   printf '%s ALL=(root) NOPASSWD: /var/lib/steamos-cec-toolkit/steamos-cec-power-standby-control *\n' "$(id -un)"
   printf '%s ALL=(root) NOPASSWD: /var/lib/steamos-cec-toolkit/steamos-cec-usb-wake-control *\n' "$(id -un)"
+  printf '%s ALL=(root) NOPASSWD: /var/lib/steamos-cec-toolkit/steamos-cec-permissions-apply\n' "$(id -un)"
 } > "$sudoers_tmp"
 sudo install -m 0440 "$sudoers_tmp" /etc/sudoers.d/zz-steamos-cec-toolkit-volume
 rm -f "$sudoers_tmp"

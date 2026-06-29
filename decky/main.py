@@ -107,6 +107,9 @@ class Plugin:
     async def restart_external_volume(self) -> dict:
         return await self._run_ctl("restart-external-volume")
 
+    async def repair_cec_permissions(self) -> dict:
+        return await self._run_ctl("repair-cec-permissions")
+
     async def debug_cec(self, seconds: int = 3) -> dict:
         safe_seconds = max(1, min(int(seconds), 5))
         return await self._run_ctl("debug-cec", str(safe_seconds))

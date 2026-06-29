@@ -71,6 +71,11 @@ if [[ -f "$STAGED_BIN_DIR/steamos-cec-power-standby-control" ]]; then
     "$ROOT_HELPER_DIR/steamos-cec-power-standby-control"
 fi
 
+if [[ -f "$STAGED_BIN_DIR/steamos-cec-permissions-apply" ]]; then
+  install -m 0755 "$STAGED_BIN_DIR/steamos-cec-permissions-apply" \
+    "$ROOT_HELPER_DIR/steamos-cec-permissions-apply"
+fi
+
 if [[ -f "$STAGED_BIN_DIR/steamos-cec-before-sleep" ]]; then
   install -m 0755 "$STAGED_BIN_DIR/steamos-cec-before-sleep" \
     "$ROOT_HELPER_DIR/steamos-cec-before-sleep"
@@ -92,6 +97,19 @@ if [[ -f "$STAGED_BIN_DIR/steamos-cec-before-sleep.service" ]]; then
   systemctl daemon-reload
 fi
 
+if [[ -f "$STAGED_BIN_DIR/steamos-cec-permissions.service" ]]; then
+  install -m 0644 "$STAGED_BIN_DIR/steamos-cec-permissions.service" \
+    /etc/systemd/system/steamos-cec-permissions.service
+  systemctl daemon-reload
+  systemctl enable --now steamos-cec-permissions.service
+fi
+
+if [[ -f "$STAGED_BIN_DIR/70-steamos-cec-toolkit.rules" ]]; then
+  install -D -m 0644 "$STAGED_BIN_DIR/70-steamos-cec-toolkit.rules" \
+    /etc/udev/rules.d/70-steamos-cec-toolkit.rules
+  udevadm control --reload-rules || true
+fi
+
 if [[ -f "$STAGED_BIN_DIR/steamos-cec-usb-wake.service" ]]; then
   install -m 0644 "$STAGED_BIN_DIR/steamos-cec-usb-wake.service" \
     /etc/systemd/system/steamos-cec-usb-wake.service
@@ -103,6 +121,7 @@ fi
   printf '%s ALL=(root) NOPASSWD: %s/steamos-cec-debug-monitor *\n' "$DECK_USER" "$ROOT_HELPER_DIR"
   printf '%s ALL=(root) NOPASSWD: %s/steamos-cec-power-standby-control *\n' "$DECK_USER" "$ROOT_HELPER_DIR"
   printf '%s ALL=(root) NOPASSWD: %s/steamos-cec-usb-wake-control *\n' "$DECK_USER" "$ROOT_HELPER_DIR"
+  printf '%s ALL=(root) NOPASSWD: %s/steamos-cec-permissions-apply\n' "$DECK_USER" "$ROOT_HELPER_DIR"
 } > "$SUDOERS_FILE"
 chmod 0440 "$SUDOERS_FILE"
 

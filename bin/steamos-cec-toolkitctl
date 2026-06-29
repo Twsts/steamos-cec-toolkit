@@ -729,6 +729,23 @@ def set_config(updates: dict[str, str]) -> dict[str, Any]:
     return payload
 
 
+def repair_cec_permissions() -> dict[str, Any]:
+    if not CEC_PERMISSIONS_HELPER.exists():
+        payload = status()
+        payload["ok"] = False
+        payload["error"] = "CEC permissions helper is missing; rerun the installer."
+        return payload
+
+    result = run(["sudo", "-n", str(CEC_PERMISSIONS_HELPER)], timeout=15)
+    systemctl_user("restart", "cecd.service")
+    payload = status()
+    payload["action"] = result
+    if not result["ok"]:
+        payload["ok"] = False
+        payload["error"] = result["stdout"] or "CEC permission repair failed; rerun the installer from SSH/Desktop."
+    return payload
+
+
 def test_volume(action: str) -> dict[str, Any]:
     if action not in {"up", "down", "mute"}:
         return {"ok": False, "error": f"Unknown volume action: {action}"}
@@ -866,6 +883,7 @@ def main() -> int:
     sub.add_parser("wake")
     sub.add_parser("standby")
     sub.add_parser("restart-external-volume")
+    sub.add_parser("repair-cec-permissions")
     args = parser.parse_args()
 
     if args.command == "status":
@@ -904,6 +922,8 @@ def main() -> int:
         payload = standby_tv()
     elif args.command == "restart-external-volume":
         payload = restart_external_volume()
+    elif args.command == "repair-cec-permissions":
+        payload = repair_cec_permissions()
     else:
         payload = {"ok": False, "error": "Unknown command"}
 
