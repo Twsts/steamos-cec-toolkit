@@ -181,7 +181,9 @@ The Decky plugin is the first place to check:
 - `CEC volume buttons` should be `On` if you want `+ / -` instead of the normal
   slider.
 - `Relative volume` should be `OK` when ExternalVolume is active.
-- If the `Install` section appears, it lists what is missing.
+- If the `Install / Repair` section appears, it lists what is missing. CEC
+  device permission problems can usually be repaired directly from the plugin;
+  missing root helpers still require rerunning the installer.
 
 The normal repair step is simply to rerun the latest installer:
 
