@@ -28,6 +28,15 @@ run_as_user_bus() {
 
 echo "steamos-cec: sending TV standby before sleep/shutdown"
 
+if [[ -e "$CEC_DEVICE" ]]; then
+  /usr/bin/cec-ctl -d "$CEC_DEVICE" -s --raw-msg \
+    -f "$CEC_PLAYBACK_LOGICAL_ADDRESS" -t "$TV_LOGICAL_ADDRESS" \
+    --custom-command cmd=0x36 || true
+  /usr/bin/cec-ctl -d "$CEC_DEVICE" -s --raw-msg \
+    -f "$CEC_PLAYBACK_LOGICAL_ADDRESS" -t 15 \
+    --custom-command cmd=0x36 || true
+fi
+
 run_as_user_bus busctl --user call \
   com.steampowered.CecDaemon1 \
   /com/steampowered/CecDaemon1/Daemon \
@@ -41,14 +50,5 @@ run_as_user_bus busctl --user call \
   com.steampowered.CecDaemon1.CecDevice1 \
   Standby y "$TV_LOGICAL_ADDRESS" \
   || true
-
-if [[ -e "$CEC_DEVICE" ]]; then
-  /usr/bin/cec-ctl -d "$CEC_DEVICE" -s --raw-msg \
-    -f "$CEC_PLAYBACK_LOGICAL_ADDRESS" -t "$TV_LOGICAL_ADDRESS" \
-    --custom-command cmd=0x36 || true
-  /usr/bin/cec-ctl -d "$CEC_DEVICE" -s --raw-msg \
-    -f "$CEC_PLAYBACK_LOGICAL_ADDRESS" -t 15 \
-    --custom-command cmd=0x36 || true
-fi
 
 sleep 1
