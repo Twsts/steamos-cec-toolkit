@@ -5,25 +5,28 @@
 > project, and is tested on one known-good HTPC setup: a Radeon 9070 XT system
 > with a UGREEN DisplayPort-to-HDMI CEC adapter exposing `/dev/cec0`.
 
-SteamOS CEC Toolkit is an installable set of scripts, systemd units,
-WirePlumber overrides, and a Decky plugin for DIY Steam Machine / HTPC builds
-that use HDMI-CEC.
+SteamOS CEC Toolkit adds living-room HDMI-CEC behavior to DIY SteamOS /
+Steam Machine / HTPC builds. It installs scripts, systemd units, WirePlumber
+overrides, and a Decky plugin so Game Mode can control the TV/AVR chain like a
+console.
 
 It was built for a living-room SteamOS box where:
 
-- SteamOS Game Mode should show relative volume controls (`+` / `-`) instead of
-  a normal software volume slider.
-- The `+` / `-` buttons should control the real receiver / soundbar volume over
-  HDMI-CEC.
 - A controller Home/Guide/Steam-button press should wake/power on the TV/AVR
   over HDMI-CEC and switch the active input back to the SteamOS box.
+- SteamOS should be able to send TV standby when the system sleeps or shuts
+  down.
+- SteamOS can optionally suspend when the TV broadcasts HDMI-CEC standby.
+- Supported Bluetooth adapters and controller receivers can optionally be set up
+  to wake SteamOS from suspend before the toolkit sends CEC wake/input
+  selection.
+- Gamescope can optionally be recovered after CEC wake/input switching if the
+  display comes back in a bad state.
+- SteamOS Game Mode can show relative volume controls (`+` / `-`) instead of a
+  normal software volume slider, and those buttons can control the real
+  receiver / soundbar volume over HDMI-CEC.
 - The original Steam Controller has a HID fallback profile for wake/input
   switching if Linux does not expose a normal gamepad Home button event.
-- Optional helpers can suspend SteamOS when the TV sends standby and recover
-  Gamescope after CEC wake/input switching.
-- Optional USB wake setup can allow supported Bluetooth adapters and controller
-  receivers to wake SteamOS from suspend before the toolkit sends CEC wake/input
-  selection.
 
 The project uses Valve's existing SteamOS CEC daemon (`cecd`) and PipeWire
 ExternalVolume plumbing.
