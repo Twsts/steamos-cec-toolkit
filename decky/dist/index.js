@@ -112,6 +112,9 @@ function overallLine(status) {
     if (!status.root_helper_exists || !status.sudoers_exists) {
         return "Bootstrap incomplete: root helper or sudoers rule is missing.";
     }
+    if (!status.cec_device?.readable || !status.cec_device?.writable) {
+        return "CEC device is not accessible; rerun the installer or repair permissions.";
+    }
     if (!status.external_volume?.enabled) {
         return "CEC volume buttons are off; SteamOS should use the normal volume bar.";
     }
@@ -124,7 +127,7 @@ function CapabilityDetails({ status }) {
     if (!status?.ok) {
         return null;
     }
-    return (SP_JSX.jsxs("div", { style: { fontSize: "12px", opacity: 0.8, lineHeight: 1.35 }, children: [SP_JSX.jsxs("div", { children: ["Root helper: ", yesNo(status.root_helper_exists)] }), SP_JSX.jsxs("div", { children: ["Debug helper: ", yesNo(status.debug_helper_exists)] }), SP_JSX.jsxs("div", { children: ["Power standby helper: ", yesNo(status.power_standby_helper_exists)] }), SP_JSX.jsxs("div", { children: ["USB wake helper: ", yesNo(status.usb_wake_helper_exists)] }), SP_JSX.jsxs("div", { children: ["Sudoers: ", yesNo(status.sudoers_exists)] }), SP_JSX.jsxs("div", { children: ["CEC volume buttons: ", status.external_volume?.enabled ? "On" : "Off"] }), SP_JSX.jsxs("div", { children: ["Relative volume: ", status.external_volume?.capabilities_ok ? "OK" : "Inactive"] }), SP_JSX.jsxs("div", { children: ["Custom config: ", status.config_exists ? "Present" : "Defaults"] })] }));
+    return (SP_JSX.jsxs("div", { style: { fontSize: "12px", opacity: 0.8, lineHeight: 1.35 }, children: [SP_JSX.jsxs("div", { children: ["Root helper: ", yesNo(status.root_helper_exists)] }), SP_JSX.jsxs("div", { children: ["Debug helper: ", yesNo(status.debug_helper_exists)] }), SP_JSX.jsxs("div", { children: ["Power standby helper: ", yesNo(status.power_standby_helper_exists)] }), SP_JSX.jsxs("div", { children: ["USB wake helper: ", yesNo(status.usb_wake_helper_exists)] }), SP_JSX.jsxs("div", { children: ["CEC permissions: ", status.cec_device?.readable && status.cec_device?.writable ? "OK" : "Needs repair"] }), SP_JSX.jsxs("div", { children: ["Sudoers: ", yesNo(status.sudoers_exists)] }), SP_JSX.jsxs("div", { children: ["CEC volume buttons: ", status.external_volume?.enabled ? "On" : "Off"] }), SP_JSX.jsxs("div", { children: ["Relative volume: ", status.external_volume?.capabilities_ok ? "OK" : "Inactive"] }), SP_JSX.jsxs("div", { children: ["Custom config: ", status.config_exists ? "Present" : "Defaults"] })] }));
 }
 function needsInstallHelp(status) {
     if (!status?.ok) {
@@ -134,6 +137,9 @@ function needsInstallHelp(status) {
         !status.debug_helper_exists ||
         !status.power_standby_helper_exists ||
         !status.usb_wake_helper_exists ||
+        !status.cec_permissions_helper_exists ||
+        !status.cec_device?.readable ||
+        !status.cec_device?.writable ||
         !status.sudoers_exists ||
         !status.volume_script_exists ||
         !status.external_volume_script_exists);
@@ -157,6 +163,12 @@ function missingItems(status) {
     }
     if (!status.usb_wake_helper_exists) {
         items.push("USB wake helper");
+    }
+    if (!status.cec_permissions_helper_exists) {
+        items.push("CEC permissions helper");
+    }
+    if (!status.cec_device?.readable || !status.cec_device?.writable) {
+        items.push("CEC device permissions");
     }
     if (!status.volume_script_exists) {
         items.push("volume wrapper");

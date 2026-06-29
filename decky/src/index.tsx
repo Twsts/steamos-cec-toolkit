@@ -31,7 +31,15 @@ type Status = {
   debug_helper_exists?: boolean;
   power_standby_helper_exists?: boolean;
   usb_wake_helper_exists?: boolean;
+  cec_permissions_helper_exists?: boolean;
   sudoers_exists?: boolean;
+  cec_device?: {
+    device: string;
+    exists: boolean;
+    readable: boolean;
+    writable: boolean;
+    permissions_helper_exists: boolean;
+  };
   external_volume_script_exists?: boolean;
   volume_script_exists?: boolean;
   external_volume?: ExternalVolumeState;
@@ -154,6 +162,9 @@ function overallLine(status: Status | null): string {
   if (!status.root_helper_exists || !status.sudoers_exists) {
     return "Bootstrap incomplete: root helper or sudoers rule is missing.";
   }
+  if (!status.cec_device?.readable || !status.cec_device?.writable) {
+    return "CEC device is not accessible; rerun the installer or repair permissions.";
+  }
   if (!status.external_volume?.enabled) {
     return "CEC volume buttons are off; SteamOS should use the normal volume bar.";
   }
@@ -174,6 +185,7 @@ function CapabilityDetails({ status }: { status: Status | null }) {
       <div>Debug helper: {yesNo(status.debug_helper_exists)}</div>
       <div>Power standby helper: {yesNo(status.power_standby_helper_exists)}</div>
       <div>USB wake helper: {yesNo(status.usb_wake_helper_exists)}</div>
+      <div>CEC permissions: {status.cec_device?.readable && status.cec_device?.writable ? "OK" : "Needs repair"}</div>
       <div>Sudoers: {yesNo(status.sudoers_exists)}</div>
       <div>CEC volume buttons: {status.external_volume?.enabled ? "On" : "Off"}</div>
       <div>Relative volume: {status.external_volume?.capabilities_ok ? "OK" : "Inactive"}</div>
@@ -191,6 +203,9 @@ function needsInstallHelp(status: Status | null): boolean {
     !status.debug_helper_exists ||
     !status.power_standby_helper_exists ||
     !status.usb_wake_helper_exists ||
+    !status.cec_permissions_helper_exists ||
+    !status.cec_device?.readable ||
+    !status.cec_device?.writable ||
     !status.sudoers_exists ||
     !status.volume_script_exists ||
     !status.external_volume_script_exists
@@ -216,6 +231,12 @@ function missingItems(status: Status | null): string[] {
   }
   if (!status.usb_wake_helper_exists) {
     items.push("USB wake helper");
+  }
+  if (!status.cec_permissions_helper_exists) {
+    items.push("CEC permissions helper");
+  }
+  if (!status.cec_device?.readable || !status.cec_device?.writable) {
+    items.push("CEC device permissions");
   }
   if (!status.volume_script_exists) {
     items.push("volume wrapper");

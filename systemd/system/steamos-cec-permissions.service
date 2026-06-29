@@ -1,0 +1,10 @@
+[Unit]
+Description=Repair SteamOS CEC device permissions
+After=systemd-udevd.service
+
+[Service]
+Type=oneshot
+ExecStart=/var/lib/steamos-cec-toolkit/steamos-cec-permissions-apply
+
+[Install]
+WantedBy=multi-user.target

@@ -139,9 +139,12 @@ Root files:
 /etc/sudoers.d/zz-steamos-cec-toolkit-volume
 /var/lib/steamos-cec-toolkit/steamos-cec-volume-raw
 /var/lib/steamos-cec-toolkit/steamos-cec-before-sleep
+/var/lib/steamos-cec-toolkit/steamos-cec-permissions-apply
 /var/lib/steamos-cec-toolkit/steamos-cec-usb-wake-apply
 /etc/systemd/system/steamos-cec-before-sleep.service
+/etc/systemd/system/steamos-cec-permissions.service
 /etc/systemd/system/steamos-cec-usb-wake.service
+/etc/udev/rules.d/70-steamos-cec-toolkit.rules
 ```
 
 USB/Bluetooth wake from suspend depends on the USB/Bluetooth adapter, firmware,
@@ -150,6 +153,11 @@ Bluetooth/controller receivers, but it cannot make unsupported hardware wake the
 PC from suspend. By default it matches USB Bluetooth radios by Bluetooth device
 class, controller receiver names, and a small known-safe USB ID list for devices
 that do not expose a readable product name.
+
+CEC device access can also change after suspend, hotplug, or a SteamOS update.
+The toolkit installs a small root helper, systemd unit, and udev rule to keep
+the configured `/dev/cec*` device readable and writable by the SteamOS desktop
+user so the user-level `cecd` service can reattach the adapter.
 
 ## SteamOS Updates and Recovery
 
@@ -182,7 +190,8 @@ bash <(curl -fsSL https://github.com/Twsts/steamos-cec-toolkit/releases/latest/d
 ```
 
 This refreshes the root helpers, sudoers rule, systemd units, WirePlumber
-override, and Decky plugin. It keeps your runtime choices in:
+override, CEC device permission repair, and Decky plugin. It keeps your runtime
+choices in:
 
 ```text
 ~/.config/steamos-cec-toolkit/config.conf

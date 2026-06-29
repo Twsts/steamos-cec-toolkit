@@ -21,6 +21,7 @@ ROOT_HELPER = Path("/var/lib/steamos-cec-toolkit/steamos-cec-volume-raw")
 DEBUG_HELPER = Path("/var/lib/steamos-cec-toolkit/steamos-cec-debug-monitor")
 POWER_STANDBY_HELPER = Path("/var/lib/steamos-cec-toolkit/steamos-cec-power-standby-control")
 USB_WAKE_HELPER = Path("/var/lib/steamos-cec-toolkit/steamos-cec-usb-wake-control")
+CEC_PERMISSIONS_HELPER = Path("/var/lib/steamos-cec-toolkit/steamos-cec-permissions-apply")
 SUDOERS_FILE = Path("/etc/sudoers.d/zz-steamos-cec-toolkit-volume")
 EXTERNAL_VOLUME_SCRIPT = Path.home() / ".local/bin/steamos-cec-external-volume"
 VOLUME_SCRIPT = Path.home() / ".local/bin/steamos-cec-volume"
@@ -628,6 +629,17 @@ def external_volume_state() -> dict[str, Any]:
     }
 
 
+def cec_device_state(config: dict[str, str]) -> dict[str, Any]:
+    device = Path(config.get("CEC_DEVICE", "/dev/cec0"))
+    return {
+        "device": str(device),
+        "exists": device.exists(),
+        "readable": os.access(device, os.R_OK),
+        "writable": os.access(device, os.W_OK),
+        "permissions_helper_exists": CEC_PERMISSIONS_HELPER.exists(),
+    }
+
+
 def status() -> dict[str, Any]:
     config = read_config()
     return {
@@ -643,7 +655,9 @@ def status() -> dict[str, Any]:
         "debug_helper_exists": DEBUG_HELPER.exists(),
         "power_standby_helper_exists": POWER_STANDBY_HELPER.exists(),
         "usb_wake_helper_exists": USB_WAKE_HELPER.exists(),
+        "cec_permissions_helper_exists": CEC_PERMISSIONS_HELPER.exists(),
         "sudoers_exists": SUDOERS_FILE.exists(),
+        "cec_device": cec_device_state(config),
         "external_volume_script_exists": EXTERNAL_VOLUME_SCRIPT.exists(),
         "volume_script_exists": VOLUME_SCRIPT.exists(),
         "external_volume": external_volume_state(),

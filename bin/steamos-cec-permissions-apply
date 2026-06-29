@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SYSTEM_CONFIG_FILE="${STEAMOS_CEC_CONFIG:-/etc/steamos-cec-toolkit.conf}"
+if [[ -r "$SYSTEM_CONFIG_FILE" ]]; then
+  # shellcheck disable=SC1090
+  source "$SYSTEM_CONFIG_FILE"
+fi
+
+STEAMOS_CEC_USER="${STEAMOS_CEC_USER:-deck}"
+
+user_home="$(getent passwd "$STEAMOS_CEC_USER" 2>/dev/null | cut -d: -f6 || true)"
+user_config_file="${user_home:-/home/$STEAMOS_CEC_USER}/.config/steamos-cec-toolkit/config.conf"
+if [[ -r "$user_config_file" ]]; then
+  # shellcheck disable=SC1090
+  source "$user_config_file"
+fi
+
+STEAMOS_CEC_USER="${STEAMOS_CEC_USER:-deck}"
+CEC_DEVICE="${CEC_DEVICE:-/dev/cec0}"
+
+apply_one() {
+  local device="$1"
+  [[ -e "$device" ]] || return 0
+
+  if command -v setfacl >/dev/null 2>&1; then
+    setfacl -m "u:${STEAMOS_CEC_USER}:rw" "$device"
+  else
+    chgrp "$STEAMOS_CEC_USER" "$device"
+    chmod g+rw "$device"
+  fi
+}
+
+if [[ -e "$CEC_DEVICE" ]]; then
+  apply_one "$CEC_DEVICE"
+else
+  for device in /dev/cec*; do
+    [[ -e "$device" ]] || continue
+    apply_one "$device"
+  done
+fi

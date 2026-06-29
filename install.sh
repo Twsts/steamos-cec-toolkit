@@ -106,6 +106,8 @@ sudo install -m 0755 "$PROJECT_DIR/bin/steamos-cec-debug-monitor" \
   /var/lib/steamos-cec-toolkit/steamos-cec-debug-monitor
 sudo install -m 0755 "$PROJECT_DIR/bin/steamos-cec-power-standby-control" \
   /var/lib/steamos-cec-toolkit/steamos-cec-power-standby-control
+sudo install -m 0755 "$PROJECT_DIR/bin/steamos-cec-permissions-apply" \
+  /var/lib/steamos-cec-toolkit/steamos-cec-permissions-apply
 sudo install -m 0755 "$PROJECT_DIR/bin/steamos-cec-before-sleep" \
   /var/lib/steamos-cec-toolkit/steamos-cec-before-sleep
 sudo install -m 0755 "$PROJECT_DIR/bin/steamos-cec-usb-wake-apply" \
@@ -114,8 +116,12 @@ sudo install -m 0755 "$PROJECT_DIR/bin/steamos-cec-usb-wake-control" \
   /var/lib/steamos-cec-toolkit/steamos-cec-usb-wake-control
 sudo install -D -m 0644 "$PROJECT_DIR/systemd/system/steamos-cec-before-sleep.service" \
   /etc/systemd/system/steamos-cec-before-sleep.service
+sudo install -D -m 0644 "$PROJECT_DIR/systemd/system/steamos-cec-permissions.service" \
+  /etc/systemd/system/steamos-cec-permissions.service
 sudo install -D -m 0644 "$PROJECT_DIR/systemd/system/steamos-cec-usb-wake.service" \
   /etc/systemd/system/steamos-cec-usb-wake.service
+sudo install -D -m 0644 "$PROJECT_DIR/udev/70-steamos-cec-toolkit.rules" \
+  /etc/udev/rules.d/70-steamos-cec-toolkit.rules
 
 sudoers_tmp="$(mktemp)"
 {
@@ -171,6 +177,12 @@ fi
 
 systemctl --user daemon-reload
 
+sudo systemctl daemon-reload
+sudo udevadm control --reload-rules || true
+sudo /var/lib/steamos-cec-toolkit/steamos-cec-permissions-apply || true
+sudo systemctl enable --now steamos-cec-permissions.service
+systemctl --user restart cecd.service 2>/dev/null || true
+
 if [[ "$enable_steam_button" -eq 1 ]]; then
   systemctl --user enable --now steamos-cec-steam-button.service
 fi
@@ -181,7 +193,6 @@ if [[ "$enable_gamescope_recovery" -eq 1 ]]; then
   systemctl --user enable --now steamos-cec-gamescope-recovery.service
 fi
 if [[ "$enable_before_sleep" -eq 1 ]]; then
-  sudo systemctl daemon-reload
   sudo /var/lib/steamos-cec-toolkit/steamos-cec-power-standby-control on
 else
   sudo systemctl daemon-reload
