@@ -28,6 +28,9 @@ It was built for a living-room SteamOS box where:
 - The original Steam Controller has a HID fallback profile for wake/input
   switching if Linux does not expose a normal gamepad Home button event.
 
+Features are configurable and can be toggled on or off from the Decky plugin
+after the toolkit has been installed.
+
 The project uses Valve's existing SteamOS CEC daemon (`cecd`) and PipeWire
 ExternalVolume plumbing.
 
