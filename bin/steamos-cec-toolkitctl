@@ -307,6 +307,10 @@ def input_devices() -> list[dict[str, Any]]:
             return
         name = current.get("name", "")
         phys = current.get("phys", "")
+        sysfs = current.get("sysfs", "")
+        bus = current.get("bus", "")
+        vendor = current.get("vendor", "")
+        product = current.get("product", "")
         handlers = current.get("handlers", "").split()
         for handler in handlers:
             if handler.startswith("event"):
@@ -316,9 +320,13 @@ def input_devices() -> list[dict[str, Any]]:
                         "path": path,
                         "name": name,
                         "phys": phys,
+                        "sysfs": sysfs,
+                        "bus": bus,
+                        "vendor": vendor,
+                        "product": product,
                         "handlers": handlers,
                         "readable": os.access(path, os.R_OK),
-                        "gamepad": is_gamepad_name(name, handlers),
+                        "gamepad": is_gamepad_name(name, handlers, vendor, product),
                     }
                 )
 
@@ -332,8 +340,18 @@ def input_devices() -> list[dict[str, Any]]:
                     continue
                 if line.startswith("N: Name="):
                     current["name"] = line.split("=", 1)[1].strip().strip('"')
+                elif line.startswith("I:"):
+                    for field in line.split():
+                        if field.startswith("Bus="):
+                            current["bus"] = field.split("=", 1)[1].lower()
+                        elif field.startswith("Vendor="):
+                            current["vendor"] = field.split("=", 1)[1].lower()
+                        elif field.startswith("Product="):
+                            current["product"] = field.split("=", 1)[1].lower()
                 elif line.startswith("P: Phys="):
                     current["phys"] = line.split("=", 1)[1].strip()
+                elif line.startswith("S: Sysfs="):
+                    current["sysfs"] = line.split("=", 1)[1].strip()
                 elif line.startswith("H: Handlers="):
                     current["handlers"] = line.split("=", 1)[1].strip()
             flush()
@@ -342,9 +360,18 @@ def input_devices() -> list[dict[str, Any]]:
     return devices
 
 
-def is_gamepad_name(name: str, handlers: list[str]) -> bool:
+def is_gamepad_name(
+    name: str,
+    handlers: list[str],
+    vendor: str = "",
+    product: str = "",
+) -> bool:
     lower_name = name.lower()
     if any(hint in lower_name for hint in NON_GAMEPAD_NAME_HINTS):
+        return False
+    if "motion sensor" in lower_name or "motion sensors" in lower_name:
+        return False
+    if vendor == "28de" and product == "11ff":
         return False
     if any(handler.startswith("js") for handler in handlers):
         return True
