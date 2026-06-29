@@ -71,6 +71,9 @@ class Plugin:
     async def discover_cec(self) -> dict:
         return await self._run_ctl("discover-cec")
 
+    async def discover_audio(self) -> dict:
+        return await self._run_ctl("discover-audio")
+
     async def discover_input(self) -> dict:
         return await self._run_ctl("discover-input")
 

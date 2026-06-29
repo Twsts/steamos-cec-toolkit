@@ -206,6 +206,44 @@ PY
   sed -n '1,8p' /tmp/steamos-cec-discovery.err 2>/dev/null || true
 fi
 
+step "Checking HDMI audio setup"
+if ~/.local/bin/steamos-cec-toolkitctl discover-audio >/tmp/steamos-cec-audio-discovery.json 2>/tmp/steamos-cec-audio-discovery.err; then
+  python3 - <<'PY' || true
+import json
+from pathlib import Path
+
+payload = json.loads(Path("/tmp/steamos-cec-audio-discovery.json").read_text())
+cards = payload.get("cards", [])
+if cards:
+    print("Found HDMI/DisplayPort audio outputs:")
+    for card in cards:
+        print(f"  {card.get('label') or card.get('name')}")
+suggested = payload.get("suggested", {})
+if suggested:
+    print("Suggested HDMI audio card:")
+    print(f"  {suggested.get('HDMI_ALSA_CARD_NAME', '')} / {suggested.get('HDMI_ALSA_CARD_NICK', '')}")
+    print(f"  route: {suggested.get('EXTERNAL_VOLUME_ROUTE', 'hdmi-output-0')}")
+note = payload.get("note", "")
+if note:
+    print(note)
+PY
+else
+  say "HDMI audio discovery did not find a usable output yet."
+  if [[ -s /tmp/steamos-cec-audio-discovery.json ]]; then
+    python3 - <<'PY' || true
+import json
+from pathlib import Path
+
+payload = json.loads(Path("/tmp/steamos-cec-audio-discovery.json").read_text())
+error = payload.get("error", "")
+if error:
+    print(error)
+PY
+  fi
+  say "You can run audio discovery later from the Decky plugin after PipeWire/Game Mode audio is available."
+  sed -n '1,8p' /tmp/steamos-cec-audio-discovery.err 2>/dev/null || true
+fi
+
 step "Done"
 cat <<'DONE'
 Open Game Mode and check the Decky plugin named "SteamOS CEC".
@@ -213,7 +251,7 @@ Open Game Mode and check the Decky plugin named "SteamOS CEC".
 Recommended first steps in the plugin:
   1. Open Configuration and run Discover CEC Devices.
   2. Test Wake TV / Select Input.
-  3. If you want SteamOS volume buttons to control CEC audio, confirm Volume Initiator and Audio Target, then test Volume Up.
+  3. If you want SteamOS volume buttons to control CEC audio, run Discover Audio Output, confirm Volume Initiator / Audio Target / HDMI Audio Card, then test Volume Up.
   4. Toggle features on or off under Features.
 
 If Game Mode does not show the plugin immediately, restart Steam or reboot.

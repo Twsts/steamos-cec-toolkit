@@ -7,6 +7,7 @@ import argparse
 import json
 import os
 import re
+import shlex
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -179,7 +180,7 @@ def write_user_config(updates: dict[str, str]) -> None:
     for key, value in updates.items():
         if key not in allowed:
             raise ValueError(f"Unsupported config key: {key}")
-        if not re.fullmatch(r"[A-Za-z0-9_./:-]+", value):
+        if not re.fullmatch(r"[A-Za-z0-9_./: ,+()[\]-]+", value):
             raise ValueError(f"Unsupported value for {key}")
         current[key] = value
 
@@ -187,7 +188,7 @@ def write_user_config(updates: dict[str, str]) -> None:
     lines = ["# SteamOS CEC Toolkit user configuration.\n"]
     for key in sorted(allowed):
         if key in current:
-            lines.append(f"{key}={current[key]}\n")
+            lines.append(f"{key}={shlex.quote(current[key])}\n")
     USER_CONFIG_FILE.write_text("".join(lines), encoding="utf-8")
 
 
@@ -337,6 +338,111 @@ def cached_discovery() -> dict[str, Any] | None:
     except (FileNotFoundError, json.JSONDecodeError):
         return None
     return payload if isinstance(payload, dict) else None
+
+
+def object_props(item: dict[str, Any]) -> dict[str, Any]:
+    info = item.get("info", {})
+    props = info.get("props", {})
+    return props if isinstance(props, dict) else {}
+
+
+def audio_label(name: str, nick: str, description: str) -> str:
+    parts = [part for part in (nick, description, name) if part]
+    seen: list[str] = []
+    for part in parts:
+        if part not in seen:
+            seen.append(part)
+    return " / ".join(seen[:2]) if seen else "HDMI audio"
+
+
+def discover_audio() -> dict[str, Any]:
+    config = read_config()
+    result = run(["pw-dump"], timeout=12)
+    fallback = {
+        "HDMI_ALSA_CARD_NAME": config.get("HDMI_ALSA_CARD_NAME", "alsa_card.pci-0000_03_00.1"),
+        "HDMI_ALSA_CARD_NICK": config.get("HDMI_ALSA_CARD_NICK", "HDA ATI HDMI"),
+        "EXTERNAL_VOLUME_ROUTE": config.get("EXTERNAL_VOLUME_ROUTE", "hdmi-output-0"),
+    }
+    if not result["ok"]:
+        return {
+            "ok": False,
+            "cards": [],
+            "routes": [],
+            "suggested": fallback,
+            "error": result["stdout"] or "pw-dump failed",
+        }
+
+    try:
+        objects = json.loads(result["stdout"])
+    except json.JSONDecodeError as error:
+        return {
+            "ok": False,
+            "cards": [],
+            "routes": [],
+            "suggested": fallback,
+            "error": f"Could not parse pw-dump JSON: {error}",
+        }
+
+    cards: list[dict[str, str]] = []
+    routes: list[str] = []
+    route_pattern = re.compile(r"hdmi-output-\d+")
+    for item in objects if isinstance(objects, list) else []:
+        props = object_props(item)
+        values = [str(value) for value in props.values() if isinstance(value, (str, int, float))]
+        text = " ".join(values).lower()
+        name = str(props.get("device.name", ""))
+        nick = str(props.get("device.nick", ""))
+        description = str(props.get("device.description", ""))
+        media_class = str(props.get("media.class", ""))
+
+        for value in values:
+            for route in route_pattern.findall(value):
+                if route not in routes:
+                    routes.append(route)
+
+        is_alsa_card = name.startswith("alsa_card.")
+        is_audio_device = media_class in {"Audio/Device", ""} and is_alsa_card
+        looks_hdmi = any(
+            term in text
+            for term in ("hdmi", "displayport", "display port", "hda ati", "hda nvidia", "hda intel")
+        )
+        if is_audio_device and looks_hdmi:
+            cards.append(
+                {
+                    "name": name,
+                    "nick": nick,
+                    "description": description,
+                    "label": audio_label(name, nick, description),
+                }
+            )
+
+    if not routes:
+        routes = [fallback["EXTERNAL_VOLUME_ROUTE"]]
+
+    configured_name = config.get("HDMI_ALSA_CARD_NAME", "")
+    suggested_card = next((card for card in cards if card["name"] == configured_name), None)
+    if suggested_card is None and cards:
+        suggested_card = cards[0]
+
+    suggested = {
+        "HDMI_ALSA_CARD_NAME": (suggested_card or {}).get("name", fallback["HDMI_ALSA_CARD_NAME"]),
+        "HDMI_ALSA_CARD_NICK": (suggested_card or {}).get("nick", fallback["HDMI_ALSA_CARD_NICK"]),
+        "EXTERNAL_VOLUME_ROUTE": routes[0],
+    }
+    note = ""
+    if len(cards) > 1:
+        note = "Multiple HDMI/DisplayPort audio cards found. Use the one connected to the TV/AVR chain."
+    elif not cards:
+        note = "No HDMI/DisplayPort ALSA card was detected from PipeWire."
+
+    return {
+        "ok": bool(cards),
+        "cards": cards,
+        "routes": routes,
+        "suggested": suggested,
+        "note": note,
+        "error": "" if cards else note,
+    }
 
 
 def input_devices() -> list[dict[str, Any]]:
@@ -727,6 +833,7 @@ def main() -> int:
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("status")
     sub.add_parser("discover-cec")
+    sub.add_parser("discover-audio")
     sub.add_parser("discover-input")
     set_config_parser = sub.add_parser("set-config")
     set_config_parser.add_argument("updates")
@@ -751,6 +858,8 @@ def main() -> int:
         payload = status()
     elif args.command == "discover-cec":
         payload = discover_cec()
+    elif args.command == "discover-audio":
+        payload = discover_audio()
     elif args.command == "discover-input":
         payload = discover_input()
     elif args.command == "set-config":

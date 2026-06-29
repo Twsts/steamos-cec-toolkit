@@ -79,6 +79,22 @@ type InputDiscovery = {
   all_input_devices: number;
 };
 
+type AudioCard = {
+  name: string;
+  nick: string;
+  description: string;
+  label: string;
+};
+
+type AudioDiscovery = {
+  ok: boolean;
+  error?: string;
+  note?: string;
+  cards: AudioCard[];
+  routes: string[];
+  suggested: Record<string, string>;
+};
+
 type ControllerWakeState = {
   script_exists: boolean;
   generic_input_enabled: boolean;
@@ -110,6 +126,7 @@ type Discovery = {
 
 const getStatus = callable<[], Status>("get_status");
 const discoverCec = callable<[], Discovery>("discover_cec");
+const discoverAudio = callable<[], AudioDiscovery>("discover_audio");
 const discoverInput = callable<[], InputDiscovery>("discover_input");
 const setConfig = callable<[Record<string, string>], Status>("set_config");
 const setService = callable<[string, boolean], Status>("set_service");
@@ -286,6 +303,24 @@ function ControllerWakeDetails({ discovery, status }: { discovery: InputDiscover
   );
 }
 
+function AudioDiscoveryDetails({ discovery }: { discovery: AudioDiscovery | null }) {
+  if (!discovery) {
+    return null;
+  }
+
+  const count = discovery.cards?.length || 0;
+  const message = discovery.ok
+    ? `Found HDMI/DP audio outputs: ${count}`
+    : discovery.error || discovery.note || "No HDMI/DP audio output detected";
+
+  return (
+    <div style={{ fontSize: "12px", opacity: 0.78, lineHeight: 1.35 }}>
+      <div>{message}</div>
+      {discovery.note && discovery.ok && <div>{discovery.note}</div>}
+    </div>
+  );
+}
+
 function DebugOutput({ output }: { output: string }) {
   if (!output) {
     return null;
@@ -316,6 +351,7 @@ function DebugOutput({ output }: { output: string }) {
 function Content() {
   const [status, setStatus] = useState<Status | null>(null);
   const [discovery, setDiscovery] = useState<Discovery | null>(null);
+  const [audioDiscovery, setAudioDiscovery] = useState<AudioDiscovery | null>(null);
   const [inputDiscovery, setInputDiscovery] = useState<InputDiscovery | null>(null);
   const [debugOutput, setDebugOutput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -338,6 +374,16 @@ function Content() {
     setBusy(true);
     try {
       setInputDiscovery(await discoverInput());
+      setStatus(await getStatus());
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const refreshAudioDiscovery = async () => {
+    setBusy(true);
+    try {
+      setAudioDiscovery(await discoverAudio());
       setStatus(await getStatus());
     } finally {
       setBusy(false);
@@ -392,6 +438,16 @@ function Content() {
   }));
   const initiator = configValue(status, "CEC_VOLUME_INITIATOR", discovered?.suggested?.CEC_VOLUME_INITIATOR || "0");
   const audioTarget = configValue(status, "CEC_AUDIO_LOGICAL_ADDRESS", discovered?.suggested?.CEC_AUDIO_LOGICAL_ADDRESS || "5");
+  const audioCardName = configValue(status, "HDMI_ALSA_CARD_NAME", audioDiscovery?.suggested?.HDMI_ALSA_CARD_NAME || "alsa_card.pci-0000_03_00.1");
+  const audioRoute = configValue(status, "EXTERNAL_VOLUME_ROUTE", audioDiscovery?.suggested?.EXTERNAL_VOLUME_ROUTE || "hdmi-output-0");
+  const audioCardOptions = (audioDiscovery?.cards || []).map((card) => ({
+    data: card.name,
+    label: card.label,
+  }));
+  const audioRouteOptions = (audioDiscovery?.routes || []).map((route) => ({
+    data: route,
+    label: route,
+  }));
 
   return (
     <>
@@ -516,6 +572,46 @@ function Content() {
             onChange={(option) => void runAction(() => setConfig({ CEC_AUDIO_LOGICAL_ADDRESS: String(option.data) }))}
           />
         </PanelSectionRow>
+        <PanelSectionRow>
+          <ButtonItem layout="below" disabled={busy} onClick={() => void refreshAudioDiscovery()}>
+            Discover Audio Output
+          </ButtonItem>
+        </PanelSectionRow>
+        {audioDiscovery && (
+          <PanelSectionRow>
+            <AudioDiscoveryDetails discovery={audioDiscovery} />
+          </PanelSectionRow>
+        )}
+        {audioCardOptions.length > 0 && (
+          <PanelSectionRow>
+            <DropdownItem
+              label="HDMI Audio Card"
+              description="Use the PipeWire/ALSA HDMI output connected to the TV/AVR chain"
+              rgOptions={audioCardOptions}
+              selectedOption={audioCardName}
+              disabled={busy}
+              onChange={(option) => {
+                const selected = (audioDiscovery?.cards || []).find((card) => card.name === String(option.data));
+                void runAction(() => setConfig({
+                  HDMI_ALSA_CARD_NAME: String(option.data),
+                  HDMI_ALSA_CARD_NICK: selected?.nick || selected?.description || String(option.data),
+                }));
+              }}
+            />
+          </PanelSectionRow>
+        )}
+        {audioRouteOptions.length > 1 && (
+          <PanelSectionRow>
+            <DropdownItem
+              label="ExternalVolume Route"
+              description="Usually hdmi-output-0; change only if relative volume does not attach"
+              rgOptions={audioRouteOptions}
+              selectedOption={audioRoute}
+              disabled={busy}
+              onChange={(option) => void runAction(() => setConfig({ EXTERNAL_VOLUME_ROUTE: String(option.data) }))}
+            />
+          </PanelSectionRow>
+        )}
       </PanelSection>
 
       <PanelSection title="Actions">
