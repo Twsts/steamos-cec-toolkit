@@ -165,6 +165,17 @@ import json
 from pathlib import Path
 
 payload = json.loads(Path("/tmp/steamos-cec-discovery.json").read_text())
+adapter = payload.get("cec_device", "")
+available = payload.get("available_cec_devices", [])
+note = payload.get("note", "")
+if adapter:
+    print(f"Using CEC adapter: {adapter}")
+if len(available) > 1:
+    print("Available CEC adapters:")
+    for device in available:
+        print(f"  {device}")
+if note:
+    print(note)
 devices = payload.get("devices", [])
 if devices:
     print("Found CEC devices:")
@@ -201,8 +212,8 @@ Open Game Mode and check the Decky plugin named "SteamOS CEC".
 
 Recommended first steps in the plugin:
   1. Open Configuration and run Discover CEC Devices.
-  2. Confirm Volume Initiator and Audio Target.
-  3. Use Actions to test Wake TV / Select Input and Volume Up.
+  2. Test Wake TV / Select Input.
+  3. If you want SteamOS volume buttons to control CEC audio, confirm Volume Initiator and Audio Target, then test Volume Up.
   4. Toggle features on or off under Features.
 
 If Game Mode does not show the plugin immediately, restart Steam or reboot.

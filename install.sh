@@ -71,6 +71,14 @@ fi
 if [[ ! -f "$CONFIG_FILE" ]]; then
   echo "Installing default config at $CONFIG_FILE"
   sudo install -D -m 0644 "$PROJECT_DIR/config/steamos-cec-toolkit.conf.example" "$CONFIG_FILE"
+  mapfile -t detected_cec_devices < <(compgen -G "/dev/cec*" | sort)
+  if [[ "${#detected_cec_devices[@]}" -eq 1 && "${detected_cec_devices[0]}" != "/dev/cec0" ]]; then
+    echo "Using detected CEC adapter ${detected_cec_devices[0]} in $CONFIG_FILE"
+    sudo sed -i "s|^CEC_DEVICE=.*|CEC_DEVICE=${detected_cec_devices[0]}|" "$CONFIG_FILE"
+  elif [[ "${#detected_cec_devices[@]}" -gt 1 ]]; then
+    echo "Multiple CEC adapters found: ${detected_cec_devices[*]}"
+    echo "Keeping default CEC_DEVICE=/dev/cec0. You can change this later from the Decky plugin or $CONFIG_FILE."
+  fi
 else
   echo "Keeping existing config at $CONFIG_FILE"
 fi

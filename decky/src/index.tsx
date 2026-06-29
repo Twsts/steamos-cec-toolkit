@@ -100,7 +100,9 @@ type CecDevice = {
 type Discovery = {
   ok: boolean;
   error?: string;
+  note?: string;
   cec_device: string;
+  available_cec_devices?: string[];
   devices: CecDevice[];
   suggested: Record<string, string>;
   raw: string;
@@ -383,6 +385,11 @@ function Content() {
     data: device.logical_address,
     label: device.label,
   }));
+  const cecDevice = configValue(status, "CEC_DEVICE", discovered?.suggested?.CEC_DEVICE || discovered?.cec_device || "/dev/cec0");
+  const cecDeviceOptions = (discovered?.available_cec_devices || []).map((device) => ({
+    data: device,
+    label: device,
+  }));
   const initiator = configValue(status, "CEC_VOLUME_INITIATOR", discovered?.suggested?.CEC_VOLUME_INITIATOR || "0");
   const audioTarget = configValue(status, "CEC_AUDIO_LOGICAL_ADDRESS", discovered?.suggested?.CEC_AUDIO_LOGICAL_ADDRESS || "5");
 
@@ -477,6 +484,18 @@ function Content() {
             Discover CEC Devices
           </ButtonItem>
         </PanelSectionRow>
+        {cecDeviceOptions.length > 1 && (
+          <PanelSectionRow>
+            <DropdownItem
+              label="CEC Device"
+              description="Use the adapter connected to the TV/AVR HDMI chain"
+              rgOptions={cecDeviceOptions}
+              selectedOption={cecDevice}
+              disabled={busy}
+              onChange={(option) => void runAction(() => setConfig({ CEC_DEVICE: String(option.data) }))}
+            />
+          </PanelSectionRow>
+        )}
         <PanelSectionRow>
           <DropdownItem
             label="Volume Initiator"

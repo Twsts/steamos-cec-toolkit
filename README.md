@@ -68,8 +68,9 @@ After installation, open Game Mode and use the `SteamOS CEC` Decky plugin:
 
 1. Open `Configuration`.
 2. Press `Discover CEC Devices`.
-3. Confirm `Volume Initiator` and `Audio Target`.
-4. Use `Actions` to test wake/input selection and volume.
+3. Use `Actions` to test wake/input selection.
+4. If you want SteamOS volume buttons to control CEC audio, confirm
+   `Volume Initiator` and `Audio Target`, then test volume.
 5. Toggle the features you want under `Features`.
 
 If the plugin does not appear immediately, restart Steam or reboot.

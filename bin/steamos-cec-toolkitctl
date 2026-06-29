@@ -227,24 +227,43 @@ def cec_label(logical: str, device_type: str, osd_name: str) -> str:
 def discover_cec() -> dict[str, Any]:
     config = read_config()
     cec_device = config.get("CEC_DEVICE", "/dev/cec0")
+    available = sorted(str(path) for path in Path("/dev").glob("cec*"))
     cec_path = Path(cec_device)
     if not cec_path.exists():
-        available = sorted(str(path) for path in Path("/dev").glob("cec*"))
-        return {
-            "ok": False,
-            "cec_device": cec_device,
-            "devices": [],
-            "suggested": {
-                "CEC_VOLUME_INITIATOR": "0",
-                "CEC_AUDIO_LOGICAL_ADDRESS": "5",
-            },
-            "error": (
-                f"No CEC adapter found at {cec_device}. "
-                "Check that your HDMI-CEC adapter is connected and exposed as /dev/cec*. "
-                f"Available CEC devices: {', '.join(available) if available else 'none'}."
-            ),
-            "raw": "",
-        }
+        if len(available) == 1:
+            cec_device = available[0]
+            cec_path = Path(cec_device)
+        else:
+            detail = (
+                f"No CEC adapter found at {cec_device}."
+                if not available
+                else f"Configured CEC adapter {cec_device} was not found."
+            )
+            return {
+                "ok": False,
+                "cec_device": cec_device,
+                "available_cec_devices": available,
+                "devices": [],
+                "suggested": {
+                    "CEC_DEVICE": available[0] if len(available) == 1 else cec_device,
+                    "CEC_VOLUME_INITIATOR": "0",
+                    "CEC_AUDIO_LOGICAL_ADDRESS": "5",
+                },
+                "error": (
+                    f"{detail} "
+                    "Check that your HDMI-CEC adapter is connected and exposed as /dev/cec*. "
+                    f"Available CEC devices: {', '.join(available) if available else 'none'}."
+                ),
+                "raw": "",
+            }
+    multiple_note = ""
+    if len(available) > 1:
+        multiple_note = (
+            f"Multiple CEC adapters found: {', '.join(available)}. "
+            f"Using configured CEC_DEVICE={cec_device}."
+        )
+    elif len(available) == 1 and available[0] != config.get("CEC_DEVICE", "/dev/cec0"):
+        multiple_note = f"Using detected CEC_DEVICE={cec_device}."
     result = run(["cec-ctl", "-d", cec_device, "--show-topology"], timeout=12)
     devices: list[dict[str, str]] = []
     current: dict[str, str] | None = None
@@ -295,11 +314,14 @@ def discover_cec() -> dict[str, Any]:
     payload = {
         "ok": result["ok"],
         "cec_device": cec_device,
+        "available_cec_devices": available,
         "devices": devices,
         "suggested": {
+            "CEC_DEVICE": cec_device,
             "CEC_VOLUME_INITIATOR": tv["logical_address"] if tv else "0",
             "CEC_AUDIO_LOGICAL_ADDRESS": audio["logical_address"] if audio else "5",
         },
+        "note": multiple_note,
         "error": "" if result["ok"] else result["stdout"],
         "raw": result["stdout"],
     }
