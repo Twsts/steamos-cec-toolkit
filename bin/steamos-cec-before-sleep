@@ -13,17 +13,37 @@ fi
 
 STEAMOS_CEC_USER="${STEAMOS_CEC_USER:-deck}"
 STEAMOS_CEC_UID="$(id -u "$STEAMOS_CEC_USER")"
+CEC_DEVICE="${CEC_DEVICE:-/dev/cec0}"
+TV_LOGICAL_ADDRESS="${TV_LOGICAL_ADDRESS:-0}"
 
 touch /run/steamos-cec-local-suspend
 
-runuser -u "$STEAMOS_CEC_USER" -- env \
-  XDG_RUNTIME_DIR="/run/user/$STEAMOS_CEC_UID" \
-  DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$STEAMOS_CEC_UID/bus" \
-  busctl --user call \
-    com.steampowered.CecDaemon1 \
-    /com/steampowered/CecDaemon1/Devices/Cec0 \
-    com.steampowered.CecDaemon1.CecDevice1 \
-    Standby y 0 \
+run_as_user_bus() {
+  runuser -u "$STEAMOS_CEC_USER" -- env \
+    XDG_RUNTIME_DIR="/run/user/$STEAMOS_CEC_UID" \
+    DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$STEAMOS_CEC_UID/bus" \
+    "$@"
+}
+
+echo "steamos-cec: sending TV standby before sleep/shutdown"
+
+run_as_user_bus busctl --user call \
+  com.steampowered.CecDaemon1 \
+  /com/steampowered/CecDaemon1/Daemon \
+  com.steampowered.CecDaemon1.Daemon1 \
+  Standby b true \
   || true
+
+run_as_user_bus busctl --user call \
+  com.steampowered.CecDaemon1 \
+  /com/steampowered/CecDaemon1/Devices/Cec0 \
+  com.steampowered.CecDaemon1.CecDevice1 \
+  Standby y "$TV_LOGICAL_ADDRESS" \
+  || true
+
+if [[ -e "$CEC_DEVICE" ]]; then
+  /usr/bin/cec-ctl -d "$CEC_DEVICE" -s --to "$TV_LOGICAL_ADDRESS" --standby || true
+  /usr/bin/cec-ctl -d "$CEC_DEVICE" -s --to 15 --standby || true
+fi
 
 sleep 1
