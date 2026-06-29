@@ -46,6 +46,7 @@ USB_WAKE_BLUETOOTH_CLASS=1
 
 # Optional TV standby suspend service.
 TV_LOGICAL_ADDRESS=0
+CEC_PLAYBACK_LOGICAL_ADDRESS=4
 CEC_STANDBY_OPCODE=0x36
 
 # Optional Gamescope recovery service after CEC source activation.

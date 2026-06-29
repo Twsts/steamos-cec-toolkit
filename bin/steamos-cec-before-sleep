@@ -15,6 +15,7 @@ STEAMOS_CEC_USER="${STEAMOS_CEC_USER:-deck}"
 STEAMOS_CEC_UID="$(id -u "$STEAMOS_CEC_USER")"
 CEC_DEVICE="${CEC_DEVICE:-/dev/cec0}"
 TV_LOGICAL_ADDRESS="${TV_LOGICAL_ADDRESS:-0}"
+CEC_PLAYBACK_LOGICAL_ADDRESS="${CEC_PLAYBACK_LOGICAL_ADDRESS:-4}"
 
 touch /run/steamos-cec-local-suspend
 
@@ -42,8 +43,12 @@ run_as_user_bus busctl --user call \
   || true
 
 if [[ -e "$CEC_DEVICE" ]]; then
-  /usr/bin/cec-ctl -d "$CEC_DEVICE" -s --to "$TV_LOGICAL_ADDRESS" --standby || true
-  /usr/bin/cec-ctl -d "$CEC_DEVICE" -s --to 15 --standby || true
+  /usr/bin/cec-ctl -d "$CEC_DEVICE" -s --raw-msg \
+    -f "$CEC_PLAYBACK_LOGICAL_ADDRESS" -t "$TV_LOGICAL_ADDRESS" \
+    --custom-command cmd=0x36 || true
+  /usr/bin/cec-ctl -d "$CEC_DEVICE" -s --raw-msg \
+    -f "$CEC_PLAYBACK_LOGICAL_ADDRESS" -t 15 \
+    --custom-command cmd=0x36 || true
 fi
 
 sleep 1
