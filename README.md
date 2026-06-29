@@ -521,9 +521,9 @@ Enable with:
 ./install.sh --enable-before-sleep
 ```
 
-This installs a system service that asks `cecd` to send TV standby before
-SteamOS sleeps or shuts down. The Decky plugin can toggle it after the root
-helper and system unit have been installed.
+This installs a system service and a `systemd/system-sleep` hook that ask
+`cecd` to send TV standby before SteamOS sleeps or shuts down. The Decky plugin
+can toggle it after the root helper and system unit have been installed.
 
 ## Optional Gamescope Recovery
 

@@ -182,7 +182,7 @@ if [[ "$enable_gamescope_recovery" -eq 1 ]]; then
 fi
 if [[ "$enable_before_sleep" -eq 1 ]]; then
   sudo systemctl daemon-reload
-  sudo systemctl enable steamos-cec-before-sleep.service
+  sudo /var/lib/steamos-cec-toolkit/steamos-cec-power-standby-control on
 else
   sudo systemctl daemon-reload
 fi

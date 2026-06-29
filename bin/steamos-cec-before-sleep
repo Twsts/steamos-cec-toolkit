@@ -7,6 +7,10 @@ if [[ -r "$CONFIG_FILE" ]]; then
   source "$CONFIG_FILE"
 fi
 
+if [[ "${1:-}" == "post" ]]; then
+  exit 0
+fi
+
 STEAMOS_CEC_USER="${STEAMOS_CEC_USER:-deck}"
 STEAMOS_CEC_UID="$(id -u "$STEAMOS_CEC_USER")"
 
