@@ -154,32 +154,109 @@ function yesNo(value: boolean | undefined): string {
   return value ? "OK" : "Missing";
 }
 
-function overallLine(status: Status | null): string {
+type StatusLevel = "ok" | "warn" | "error" | "checking";
+
+type StatusSummary = {
+  level: StatusLevel;
+  title: string;
+  detail: string;
+};
+
+function statusSummary(status: Status | null): StatusSummary {
   if (!status) {
-    return "Checking toolkit status...";
+    return {
+      level: "checking",
+      title: "Checking",
+      detail: "Reading toolkit status...",
+    };
   }
   if (!status.ok) {
-    return status.error ?? "Toolkit status failed";
+    return {
+      level: "error",
+      title: "Error",
+      detail: status.error ?? "Toolkit status failed",
+    };
   }
   if (!status.root_helper_exists || !status.sudoers_exists) {
-    return "Bootstrap incomplete: root helper or sudoers rule is missing.";
+    return {
+      level: "error",
+      title: "Needs reinstall",
+      detail: "Root helper or sudoers rule is missing.",
+    };
   }
   if (!status.cec_device?.exists) {
-    return `CEC adapter ${status.cec_device?.device || "/dev/cec0"} was not found. Check the adapter or run Discover CEC Devices.`;
+    return {
+      level: "error",
+      title: "CEC adapter missing",
+      detail: `${status.cec_device?.device || "/dev/cec0"} was not found. Check the adapter or run discovery.`,
+    };
   }
   if (!status.cec_device?.readable || !status.cec_device?.writable) {
-    return `CEC adapter ${status.cec_device.device} needs permission repair.`;
+    return {
+      level: "error",
+      title: "CEC permissions",
+      detail: `${status.cec_device.device} needs permission repair.`,
+    };
+  }
+  if (status.external_volume?.enabled && !status.external_volume?.capabilities_ok) {
+    return {
+      level: "warn",
+      title: "Volume needs restart",
+      detail: "CEC volume is enabled, but SteamOS has not attached relative volume yet.",
+    };
   }
   if (!status.external_volume?.enabled) {
-    return "CEC volume buttons are off; SteamOS should use the normal volume bar.";
+    return {
+      level: "ok",
+      title: "Ready",
+      detail: "CEC control is available. SteamOS volume buttons are off.",
+    };
   }
-  if (!status.external_volume?.capabilities_ok) {
-    return "ExternalVolume is installed but relative volume capabilities are not active.";
-  }
-  return "Ready: ExternalVolume and CEC helper are available.";
+  return {
+    level: "ok",
+    title: "Ready",
+    detail: "CEC control and relative volume are available.",
+  };
 }
 
-function CapabilityDetails({ status }: { status: Status | null }) {
+function statusColor(level: StatusLevel): string {
+  if (level === "ok") {
+    return "#59bf6b";
+  }
+  if (level === "warn") {
+    return "#d9a441";
+  }
+  if (level === "error") {
+    return "#d85c5c";
+  }
+  return "#8a98a8";
+}
+
+function StatusCard({ status }: { status: Status | null }) {
+  const summary = statusSummary(status);
+  const color = statusColor(summary.level);
+
+  return (
+    <div style={{ display: "flex", gap: "10px", alignItems: "flex-start" }}>
+      <div
+        style={{
+          width: "10px",
+          height: "10px",
+          borderRadius: "50%",
+          background: color,
+          marginTop: "5px",
+          flex: "0 0 auto",
+        }}
+      />
+      <div>
+        <div style={{ color, fontWeight: 600 }}>{summary.title}</div>
+        <div style={{ fontSize: "12px", opacity: 0.78, lineHeight: 1.35 }}>{summary.detail}</div>
+      </div>
+    </div>
+  );
+}
+
+function DiagnosticsDetails({ status }: { status: Status | null }) {
   if (!status?.ok) {
     return null;
   }
@@ -190,6 +267,7 @@ function CapabilityDetails({ status }: { status: Status | null }) {
       <div>Debug helper: {yesNo(status.debug_helper_exists)}</div>
       <div>Power standby helper: {yesNo(status.power_standby_helper_exists)}</div>
       <div>USB wake helper: {yesNo(status.usb_wake_helper_exists)}</div>
+      <div>Boot wake helper: {yesNo(status.boot_wake_script_exists)}</div>
       <div>CEC permissions: {status.cec_device?.readable && status.cec_device?.writable ? "OK" : "Needs repair"}</div>
       <div>Sudoers: {yesNo(status.sudoers_exists)}</div>
       <div>CEC volume buttons: {status.external_volume?.enabled ? "On" : "Off"}</div>
@@ -502,10 +580,7 @@ function Content() {
     <>
       <PanelSection title="Status">
         <PanelSectionRow>
-          <div>
-            <div>{overallLine(status)}</div>
-            <CapabilityDetails status={status} />
-          </div>
+          <StatusCard status={status} />
         </PanelSectionRow>
         <PanelSectionRow>
           <ButtonItem layout="below" disabled={busy} onClick={() => void refresh()}>
@@ -585,6 +660,39 @@ function Content() {
             disabled={busy}
             onChange={(enabled: boolean) => void runAction(() => setService("gamescope-recovery", enabled))}
           />
+        </PanelSectionRow>
+      </PanelSection>
+
+      <PanelSection title="Actions">
+        <PanelSectionRow>
+          <ButtonItem layout="below" disabled={busy || !installed} onClick={() => void runAction(wakeTv)}>
+            Wake TV / Select Input
+          </ButtonItem>
+        </PanelSectionRow>
+        <PanelSectionRow>
+          <ButtonItem layout="below" disabled={busy || !installed} onClick={() => void runAction(standbyTv)}>
+            TV Standby
+          </ButtonItem>
+        </PanelSectionRow>
+        <PanelSectionRow>
+          <ButtonItem layout="below" disabled={busy || !installed} onClick={() => void runAction(volumeUp)}>
+            Volume Up
+          </ButtonItem>
+        </PanelSectionRow>
+        <PanelSectionRow>
+          <ButtonItem layout="below" disabled={busy || !installed} onClick={() => void runAction(volumeDown)}>
+            Volume Down
+          </ButtonItem>
+        </PanelSectionRow>
+        <PanelSectionRow>
+          <ButtonItem layout="below" disabled={busy || !installed} onClick={() => void runAction(mute)}>
+            Mute
+          </ButtonItem>
+        </PanelSectionRow>
+        <PanelSectionRow>
+          <ButtonItem layout="below" disabled={busy} onClick={() => void runAction(restartExternalVolume)}>
+            Restart CEC Audio
+          </ButtonItem>
         </PanelSectionRow>
       </PanelSection>
 
@@ -676,40 +784,10 @@ function Content() {
         )}
       </PanelSection>
 
-      <PanelSection title="Actions">
-        <PanelSectionRow>
-          <ButtonItem layout="below" disabled={busy || !installed} onClick={() => void runAction(wakeTv)}>
-            Wake TV / Select Input
-          </ButtonItem>
-        </PanelSectionRow>
-        <PanelSectionRow>
-          <ButtonItem layout="below" disabled={busy || !installed} onClick={() => void runAction(standbyTv)}>
-            TV Standby
-          </ButtonItem>
-        </PanelSectionRow>
-        <PanelSectionRow>
-          <ButtonItem layout="below" disabled={busy || !installed} onClick={() => void runAction(volumeUp)}>
-            Volume Up
-          </ButtonItem>
-        </PanelSectionRow>
-        <PanelSectionRow>
-          <ButtonItem layout="below" disabled={busy || !installed} onClick={() => void runAction(volumeDown)}>
-            Volume Down
-          </ButtonItem>
-        </PanelSectionRow>
-        <PanelSectionRow>
-          <ButtonItem layout="below" disabled={busy || !installed} onClick={() => void runAction(mute)}>
-            Mute
-          </ButtonItem>
-        </PanelSectionRow>
-        <PanelSectionRow>
-          <ButtonItem layout="below" disabled={busy} onClick={() => void runAction(restartExternalVolume)}>
-            Restart CEC Audio
-          </ButtonItem>
-        </PanelSectionRow>
-      </PanelSection>
-
       <PanelSection title="Debug">
+        <PanelSectionRow>
+          <DiagnosticsDetails status={status} />
+        </PanelSectionRow>
         <PanelSectionRow>
           <ConfigDetails status={status} />
         </PanelSectionRow>

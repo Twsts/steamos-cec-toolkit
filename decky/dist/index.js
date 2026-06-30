@@ -103,35 +103,91 @@ const debugCec = callable("debug_cec");
 function yesNo(value) {
     return value ? "OK" : "Missing";
 }
-function overallLine(status) {
+function statusSummary(status) {
     if (!status) {
-        return "Checking toolkit status...";
+        return {
+            level: "checking",
+            title: "Checking",
+            detail: "Reading toolkit status...",
+        };
     }
     if (!status.ok) {
-        return status.error ?? "Toolkit status failed";
+        return {
+            level: "error",
+            title: "Error",
+            detail: status.error ?? "Toolkit status failed",
+        };
     }
     if (!status.root_helper_exists || !status.sudoers_exists) {
-        return "Bootstrap incomplete: root helper or sudoers rule is missing.";
+        return {
+            level: "error",
+            title: "Needs reinstall",
+            detail: "Root helper or sudoers rule is missing.",
+        };
     }
     if (!status.cec_device?.exists) {
-        return `CEC adapter ${status.cec_device?.device || "/dev/cec0"} was not found. Check the adapter or run Discover CEC Devices.`;
+        return {
+            level: "error",
+            title: "CEC adapter missing",
+            detail: `${status.cec_device?.device || "/dev/cec0"} was not found. Check the adapter or run discovery.`,
+        };
     }
     if (!status.cec_device?.readable || !status.cec_device?.writable) {
-        return `CEC adapter ${status.cec_device.device} needs permission repair.`;
+        return {
+            level: "error",
+            title: "CEC permissions",
+            detail: `${status.cec_device.device} needs permission repair.`,
+        };
+    }
+    if (status.external_volume?.enabled && !status.external_volume?.capabilities_ok) {
+        return {
+            level: "warn",
+            title: "Volume needs restart",
+            detail: "CEC volume is enabled, but SteamOS has not attached relative volume yet.",
+        };
     }
     if (!status.external_volume?.enabled) {
-        return "CEC volume buttons are off; SteamOS should use the normal volume bar.";
+        return {
+            level: "ok",
+            title: "Ready",
+            detail: "CEC control is available. SteamOS volume buttons are off.",
+        };
     }
-    if (!status.external_volume?.capabilities_ok) {
-        return "ExternalVolume is installed but relative volume capabilities are not active.";
-    }
-    return "Ready: ExternalVolume and CEC helper are available.";
+    return {
+        level: "ok",
+        title: "Ready",
+        detail: "CEC control and relative volume are available.",
+    };
 }
-function CapabilityDetails({ status }) {
+function statusColor(level) {
+    if (level === "ok") {
+        return "#59bf6b";
+    }
+    if (level === "warn") {
+        return "#d9a441";
+    }
+    if (level === "error") {
+        return "#d85c5c";
+    }
+    return "#8a98a8";
+}
+function StatusCard({ status }) {
+    const summary = statusSummary(status);
+    const color = statusColor(summary.level);
+    return (SP_JSX.jsxs("div", { style: { display: "flex", gap: "10px", alignItems: "flex-start" }, children: [SP_JSX.jsx("div", { style: {
+                    width: "10px",
+                    height: "10px",
+                    borderRadius: "50%",
+                    background: color,
+                    marginTop: "5px",
+                    flex: "0 0 auto",
+                } }), SP_JSX.jsxs("div", { children: [SP_JSX.jsx("div", { style: { color, fontWeight: 600 }, children: summary.title }), SP_JSX.jsx("div", { style: { fontSize: "12px", opacity: 0.78, lineHeight: 1.35 }, children: summary.detail })] })] }));
+}
+function DiagnosticsDetails({ status }) {
     if (!status?.ok) {
         return null;
     }
-    return (SP_JSX.jsxs("div", { style: { fontSize: "12px", opacity: 0.8, lineHeight: 1.35 }, children: [SP_JSX.jsxs("div", { children: ["Root helper: ", yesNo(status.root_helper_exists)] }), SP_JSX.jsxs("div", { children: ["Debug helper: ", yesNo(status.debug_helper_exists)] }), SP_JSX.jsxs("div", { children: ["Power standby helper: ", yesNo(status.power_standby_helper_exists)] }), SP_JSX.jsxs("div", { children: ["USB wake helper: ", yesNo(status.usb_wake_helper_exists)] }), SP_JSX.jsxs("div", { children: ["CEC permissions: ", status.cec_device?.readable && status.cec_device?.writable ? "OK" : "Needs repair"] }), SP_JSX.jsxs("div", { children: ["Sudoers: ", yesNo(status.sudoers_exists)] }), SP_JSX.jsxs("div", { children: ["CEC volume buttons: ", status.external_volume?.enabled ? "On" : "Off"] }), SP_JSX.jsxs("div", { children: ["Relative volume: ", status.external_volume?.capabilities_ok ? "OK" : "Inactive"] }), SP_JSX.jsxs("div", { children: ["Custom config: ", status.config_exists ? "Present" : "Defaults"] })] }));
+    return (SP_JSX.jsxs("div", { style: { fontSize: "12px", opacity: 0.8, lineHeight: 1.35 }, children: [SP_JSX.jsxs("div", { children: ["Root helper: ", yesNo(status.root_helper_exists)] }), SP_JSX.jsxs("div", { children: ["Debug helper: ", yesNo(status.debug_helper_exists)] }), SP_JSX.jsxs("div", { children: ["Power standby helper: ", yesNo(status.power_standby_helper_exists)] }), SP_JSX.jsxs("div", { children: ["USB wake helper: ", yesNo(status.usb_wake_helper_exists)] }), SP_JSX.jsxs("div", { children: ["Boot wake helper: ", yesNo(status.boot_wake_script_exists)] }), SP_JSX.jsxs("div", { children: ["CEC permissions: ", status.cec_device?.readable && status.cec_device?.writable ? "OK" : "Needs repair"] }), SP_JSX.jsxs("div", { children: ["Sudoers: ", yesNo(status.sudoers_exists)] }), SP_JSX.jsxs("div", { children: ["CEC volume buttons: ", status.external_volume?.enabled ? "On" : "Off"] }), SP_JSX.jsxs("div", { children: ["Relative volume: ", status.external_volume?.capabilities_ok ? "OK" : "Inactive"] }), SP_JSX.jsxs("div", { children: ["Custom config: ", status.config_exists ? "Present" : "Defaults"] })] }));
 }
 function needsInstallHelp(status) {
     if (!status?.ok) {
@@ -341,13 +397,13 @@ function Content() {
         data: route,
         label: route,
     }));
-    return (SP_JSX.jsxs(SP_JSX.Fragment, { children: [SP_JSX.jsxs(DFL.PanelSection, { title: "Status", children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsxs("div", { children: [SP_JSX.jsx("div", { children: overallLine(status) }), SP_JSX.jsx(CapabilityDetails, { status: status })] }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy, onClick: () => void refresh(), children: "Refresh" }) })] }), showInstallHelp && (SP_JSX.jsx(InstallHelp, { status: status, busy: busy, onRepairPermissions: () => void runAction(repairCecPermissions) })), SP_JSX.jsxs(DFL.PanelSection, { title: "Features", children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ToggleField, { label: "CEC Volume Buttons", description: "Show SteamOS + / - controls and send volume commands over HDMI-CEC", checked: !!cecVolume?.enabled, disabled: busy || !installed, onChange: (enabled) => void runAction(() => setExternalVolume(enabled)) }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ToggleField, { label: "Controller Button Wakes TV", description: "Use controller Home/Guide buttons to wake the TV/AVR and select this input", checked: !!steamButton?.is_enabled, disabled: busy, onChange: (enabled) => void runAction(() => setService("steam-button", enabled)) }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ToggleField, { label: "SteamOS Start Wakes TV", description: "Wake the TV/AVR and select this input when SteamOS starts", checked: !!bootWake?.is_enabled, disabled: busy || !status?.boot_wake_script_exists, onChange: (enabled) => void runAction(() => setService("boot-wake", enabled)) }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ToggleField, { label: "TV Standby Suspends SteamOS", description: "Suspend SteamOS when the TV broadcasts HDMI-CEC standby", checked: !!tvStandby?.is_enabled, disabled: busy, onChange: (enabled) => void runAction(() => setService("tv-standby", enabled)) }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ToggleField, { label: "SteamOS Sleep Turns Off TV", description: "Send TV standby before SteamOS sleeps or shuts down", checked: !!powerStandby?.is_enabled, disabled: busy || !status?.power_standby_helper_exists, onChange: (enabled) => void runAction(() => setSystemService("power-standby", enabled)) }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ToggleField, { label: "Bluetooth/Controller Wake", description: "Allow supported Bluetooth and controller receivers to wake SteamOS from suspend", checked: !!usbWake?.is_enabled, disabled: busy || !status?.usb_wake_helper_exists, onChange: (enabled) => void runAction(() => setSystemService("usb-wake", enabled)) }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ToggleField, { label: "Gamescope Recovery", description: "Restart Gamescope after CEC input activation if the display gets stuck", checked: !!gamescopeRecovery?.is_enabled, disabled: busy, onChange: (enabled) => void runAction(() => setService("gamescope-recovery", enabled)) }) })] }), SP_JSX.jsxs(DFL.PanelSection, { title: "Configuration", children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy, onClick: () => void refreshInputDiscovery(), children: "Discover Controllers" }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(ControllerWakeDetails, { discovery: inputDiscovery, status: status }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy, onClick: () => void refreshDiscovery(), children: "Discover CEC Devices" }) }), cecDeviceOptions.length > 1 && (SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.DropdownItem, { label: "CEC Device", description: "Use the adapter connected to the TV/AVR HDMI chain", rgOptions: cecDeviceOptions, selectedOption: cecDevice, disabled: busy, onChange: (option) => void runAction(() => setConfig({ CEC_DEVICE: String(option.data) })) }) })), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.DropdownItem, { label: "Volume Initiator", description: "Usually TV logical address 0 for receivers that reject playback-device volume", rgOptions: deviceOptions.length ? deviceOptions : [{ data: initiator, label: `Logical ${initiator}` }], selectedOption: initiator, disabled: busy, onChange: (option) => void runAction(() => setConfig({ CEC_VOLUME_INITIATOR: String(option.data) })) }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.DropdownItem, { label: "Audio Target", description: "The receiver/audio-system logical address that receives volume commands", rgOptions: deviceOptions.length ? deviceOptions : [{ data: audioTarget, label: `Logical ${audioTarget}` }], selectedOption: audioTarget, disabled: busy, onChange: (option) => void runAction(() => setConfig({ CEC_AUDIO_LOGICAL_ADDRESS: String(option.data) })) }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy, onClick: () => void refreshAudioDiscovery(), children: "Discover Audio Output" }) }), audioDiscovery && (SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(AudioDiscoveryDetails, { discovery: audioDiscovery }) })), audioCardOptions.length > 0 && (SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.DropdownItem, { label: "HDMI Audio Card", description: "Use the PipeWire/ALSA HDMI output connected to the TV/AVR chain", rgOptions: audioCardOptions, selectedOption: audioCardName, disabled: busy, onChange: (option) => {
+    return (SP_JSX.jsxs(SP_JSX.Fragment, { children: [SP_JSX.jsxs(DFL.PanelSection, { title: "Status", children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(StatusCard, { status: status }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy, onClick: () => void refresh(), children: "Refresh" }) })] }), showInstallHelp && (SP_JSX.jsx(InstallHelp, { status: status, busy: busy, onRepairPermissions: () => void runAction(repairCecPermissions) })), SP_JSX.jsxs(DFL.PanelSection, { title: "Features", children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ToggleField, { label: "CEC Volume Buttons", description: "Show SteamOS + / - controls and send volume commands over HDMI-CEC", checked: !!cecVolume?.enabled, disabled: busy || !installed, onChange: (enabled) => void runAction(() => setExternalVolume(enabled)) }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ToggleField, { label: "Controller Button Wakes TV", description: "Use controller Home/Guide buttons to wake the TV/AVR and select this input", checked: !!steamButton?.is_enabled, disabled: busy, onChange: (enabled) => void runAction(() => setService("steam-button", enabled)) }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ToggleField, { label: "SteamOS Start Wakes TV", description: "Wake the TV/AVR and select this input when SteamOS starts", checked: !!bootWake?.is_enabled, disabled: busy || !status?.boot_wake_script_exists, onChange: (enabled) => void runAction(() => setService("boot-wake", enabled)) }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ToggleField, { label: "TV Standby Suspends SteamOS", description: "Suspend SteamOS when the TV broadcasts HDMI-CEC standby", checked: !!tvStandby?.is_enabled, disabled: busy, onChange: (enabled) => void runAction(() => setService("tv-standby", enabled)) }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ToggleField, { label: "SteamOS Sleep Turns Off TV", description: "Send TV standby before SteamOS sleeps or shuts down", checked: !!powerStandby?.is_enabled, disabled: busy || !status?.power_standby_helper_exists, onChange: (enabled) => void runAction(() => setSystemService("power-standby", enabled)) }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ToggleField, { label: "Bluetooth/Controller Wake", description: "Allow supported Bluetooth and controller receivers to wake SteamOS from suspend", checked: !!usbWake?.is_enabled, disabled: busy || !status?.usb_wake_helper_exists, onChange: (enabled) => void runAction(() => setSystemService("usb-wake", enabled)) }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ToggleField, { label: "Gamescope Recovery", description: "Restart Gamescope after CEC input activation if the display gets stuck", checked: !!gamescopeRecovery?.is_enabled, disabled: busy, onChange: (enabled) => void runAction(() => setService("gamescope-recovery", enabled)) }) })] }), SP_JSX.jsxs(DFL.PanelSection, { title: "Actions", children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy || !installed, onClick: () => void runAction(wakeTv), children: "Wake TV / Select Input" }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy || !installed, onClick: () => void runAction(standbyTv), children: "TV Standby" }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy || !installed, onClick: () => void runAction(volumeUp), children: "Volume Up" }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy || !installed, onClick: () => void runAction(volumeDown), children: "Volume Down" }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy || !installed, onClick: () => void runAction(mute), children: "Mute" }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy, onClick: () => void runAction(restartExternalVolume), children: "Restart CEC Audio" }) })] }), SP_JSX.jsxs(DFL.PanelSection, { title: "Configuration", children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy, onClick: () => void refreshInputDiscovery(), children: "Discover Controllers" }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(ControllerWakeDetails, { discovery: inputDiscovery, status: status }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy, onClick: () => void refreshDiscovery(), children: "Discover CEC Devices" }) }), cecDeviceOptions.length > 1 && (SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.DropdownItem, { label: "CEC Device", description: "Use the adapter connected to the TV/AVR HDMI chain", rgOptions: cecDeviceOptions, selectedOption: cecDevice, disabled: busy, onChange: (option) => void runAction(() => setConfig({ CEC_DEVICE: String(option.data) })) }) })), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.DropdownItem, { label: "Volume Initiator", description: "Usually TV logical address 0 for receivers that reject playback-device volume", rgOptions: deviceOptions.length ? deviceOptions : [{ data: initiator, label: `Logical ${initiator}` }], selectedOption: initiator, disabled: busy, onChange: (option) => void runAction(() => setConfig({ CEC_VOLUME_INITIATOR: String(option.data) })) }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.DropdownItem, { label: "Audio Target", description: "The receiver/audio-system logical address that receives volume commands", rgOptions: deviceOptions.length ? deviceOptions : [{ data: audioTarget, label: `Logical ${audioTarget}` }], selectedOption: audioTarget, disabled: busy, onChange: (option) => void runAction(() => setConfig({ CEC_AUDIO_LOGICAL_ADDRESS: String(option.data) })) }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy, onClick: () => void refreshAudioDiscovery(), children: "Discover Audio Output" }) }), audioDiscovery && (SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(AudioDiscoveryDetails, { discovery: audioDiscovery }) })), audioCardOptions.length > 0 && (SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.DropdownItem, { label: "HDMI Audio Card", description: "Use the PipeWire/ALSA HDMI output connected to the TV/AVR chain", rgOptions: audioCardOptions, selectedOption: audioCardName, disabled: busy, onChange: (option) => {
                                 const selected = (audioDiscovery?.cards || []).find((card) => card.name === String(option.data));
                                 void runAction(() => setConfig({
                                     HDMI_ALSA_CARD_NAME: String(option.data),
                                     HDMI_ALSA_CARD_NICK: selected?.nick || selected?.description || String(option.data),
                                 }));
-                            } }) })), audioRouteOptions.length > 1 && (SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.DropdownItem, { label: "ExternalVolume Route", description: "Usually hdmi-output-0; change only if relative volume does not attach", rgOptions: audioRouteOptions, selectedOption: audioRoute, disabled: busy, onChange: (option) => void runAction(() => setConfig({ EXTERNAL_VOLUME_ROUTE: String(option.data) })) }) }))] }), SP_JSX.jsxs(DFL.PanelSection, { title: "Actions", children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy || !installed, onClick: () => void runAction(wakeTv), children: "Wake TV / Select Input" }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy || !installed, onClick: () => void runAction(standbyTv), children: "TV Standby" }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy || !installed, onClick: () => void runAction(volumeUp), children: "Volume Up" }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy || !installed, onClick: () => void runAction(volumeDown), children: "Volume Down" }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy || !installed, onClick: () => void runAction(mute), children: "Mute" }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy, onClick: () => void runAction(restartExternalVolume), children: "Restart CEC Audio" }) })] }), SP_JSX.jsxs(DFL.PanelSection, { title: "Debug", children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(ConfigDetails, { status: status }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy || !status?.debug_helper_exists, onClick: () => void captureDebug(), children: "Capture CEC Messages" }) }), SP_JSX.jsx(DebugOutput, { output: debugOutput }), debugOutput && (SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy, onClick: () => setDebugOutput(""), children: "Clear Capture" }) }))] })] }));
+                            } }) })), audioRouteOptions.length > 1 && (SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.DropdownItem, { label: "ExternalVolume Route", description: "Usually hdmi-output-0; change only if relative volume does not attach", rgOptions: audioRouteOptions, selectedOption: audioRoute, disabled: busy, onChange: (option) => void runAction(() => setConfig({ EXTERNAL_VOLUME_ROUTE: String(option.data) })) }) }))] }), SP_JSX.jsxs(DFL.PanelSection, { title: "Debug", children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DiagnosticsDetails, { status: status }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(ConfigDetails, { status: status }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy || !status?.debug_helper_exists, onClick: () => void captureDebug(), children: "Capture CEC Messages" }) }), SP_JSX.jsx(DebugOutput, { output: debugOutput }), debugOutput && (SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy, onClick: () => setDebugOutput(""), children: "Clear Capture" }) }))] })] }));
 }
 var index = definePlugin(() => {
     return {
