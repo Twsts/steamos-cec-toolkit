@@ -6,6 +6,7 @@ CONFIG_FILE="${STEAMOS_CEC_CONFIG:-/etc/steamos-cec-toolkit.conf}"
 
 enable_external_volume=1
 enable_steam_button=0
+enable_boot_wake=0
 enable_tv_standby=0
 enable_gamescope_recovery=0
 enable_before_sleep=0
@@ -18,6 +19,7 @@ Usage: ./install.sh [options]
 
 Options:
   --enable-steam-button         Wake the TV/AVR and activate this HDMI input from the Steam button/controller wake
+  --enable-boot-wake            Wake the TV/AVR and activate this HDMI input when SteamOS starts
   --enable-tv-standby-suspend   Suspend SteamOS when the TV broadcasts HDMI-CEC standby
   --enable-gamescope-recovery   Restart Gamescope after CEC source activation if the display gets stuck
   --enable-before-sleep         Send HDMI-CEC standby before SteamOS sleeps (system service)
@@ -34,6 +36,7 @@ USAGE
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --enable-steam-button) enable_steam_button=1 ;;
+    --enable-boot-wake) enable_boot_wake=1 ;;
     --enable-tv-standby-suspend) enable_tv_standby=1 ;;
     --enable-gamescope-recovery) enable_gamescope_recovery=1 ;;
     --enable-before-sleep) enable_before_sleep=1 ;;
@@ -98,6 +101,7 @@ install -d "$HOME/.local/bin"
 install -m 0755 "$PROJECT_DIR/bin/steamos-cec-volume" "$HOME/.local/bin/steamos-cec-volume"
 install -m 0755 "$PROJECT_DIR/bin/steamos-cec-toolkitctl" "$HOME/.local/bin/steamos-cec-toolkitctl"
 install -m 0755 "$PROJECT_DIR/bin/steamos-cec-external-volume" "$HOME/.local/bin/steamos-cec-external-volume"
+install -m 0755 "$PROJECT_DIR/bin/steamos-cec-boot-wake" "$HOME/.local/bin/steamos-cec-boot-wake"
 
 sudo install -d -m 0755 /var/lib/steamos-cec-toolkit
 sudo install -m 0755 "$PROJECT_DIR/bin/steamos-cec-volume-raw" \
@@ -154,6 +158,10 @@ if [[ "$enable_steam_button" -eq 1 ]]; then
     "$HOME/.config/systemd/user/steamos-cec-steam-button.service"
 fi
 
+install -d "$HOME/.config/systemd/user"
+install -m 0644 "$PROJECT_DIR/systemd/user/steamos-cec-boot-wake.service" \
+  "$HOME/.config/systemd/user/steamos-cec-boot-wake.service"
+
 if [[ "$enable_tv_standby" -eq 1 ]]; then
   if ! python3 -c 'import dbus_next' >/dev/null 2>&1; then
     echo "warning: python module dbus_next is missing; TV standby service may fail" >&2
@@ -186,6 +194,9 @@ systemctl --user restart cecd.service 2>/dev/null || true
 
 if [[ "$enable_steam_button" -eq 1 ]]; then
   systemctl --user enable --now steamos-cec-steam-button.service
+fi
+if [[ "$enable_boot_wake" -eq 1 ]]; then
+  systemctl --user enable steamos-cec-boot-wake.service
 fi
 if [[ "$enable_tv_standby" -eq 1 ]]; then
   systemctl --user enable --now steamos-cec-tv-standby-suspend.service

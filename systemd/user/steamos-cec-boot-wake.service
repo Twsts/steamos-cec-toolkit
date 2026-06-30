@@ -1,0 +1,11 @@
+[Unit]
+Description=Wake TV and activate SteamOS HDMI-CEC source at session start
+After=cecd.service
+Wants=cecd.service
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/steamos-cec-boot-wake
+
+[Install]
+WantedBy=default.target

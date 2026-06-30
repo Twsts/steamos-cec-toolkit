@@ -25,6 +25,7 @@ CEC_PERMISSIONS_HELPER = Path("/var/lib/steamos-cec-toolkit/steamos-cec-permissi
 SUDOERS_FILE = Path("/etc/sudoers.d/zz-steamos-cec-toolkit-volume")
 EXTERNAL_VOLUME_SCRIPT = Path.home() / ".local/bin/steamos-cec-external-volume"
 VOLUME_SCRIPT = Path.home() / ".local/bin/steamos-cec-volume"
+BOOT_WAKE_SCRIPT = Path.home() / ".local/bin/steamos-cec-boot-wake"
 WIREPLUMBER_CONFIG = (
     Path.home()
     / ".config/wireplumber/wireplumber.conf.d/99-steamos-cec-external-volume.conf"
@@ -84,6 +85,7 @@ wireplumber.settings {
 """
 
 USER_SERVICES = {
+    "boot-wake": "steamos-cec-boot-wake.service",
     "steam-button": "steamos-cec-steam-button.service",
     "tv-standby": "steamos-cec-tv-standby-suspend.service",
     "gamescope-recovery": "steamos-cec-gamescope-recovery.service",
@@ -660,6 +662,7 @@ def status() -> dict[str, Any]:
         "cec_device": cec_device_state(config),
         "external_volume_script_exists": EXTERNAL_VOLUME_SCRIPT.exists(),
         "volume_script_exists": VOLUME_SCRIPT.exists(),
+        "boot_wake_script_exists": BOOT_WAKE_SCRIPT.exists(),
         "external_volume": external_volume_state(),
         "controller_wake": {
             "script_exists": (Path.home() / ".local/bin/steamos-cec-steam-button").exists(),

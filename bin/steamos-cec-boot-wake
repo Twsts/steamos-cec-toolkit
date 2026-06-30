@@ -1,0 +1,106 @@
+#!/usr/bin/env python3
+"""Wake TV/AVR and activate the SteamOS HDMI-CEC source once at session start."""
+
+from __future__ import annotations
+
+import logging
+import os
+import subprocess
+import time
+
+
+CEC_BUS = "com.steampowered.CecDaemon1"
+CEC_DAEMON_PATH = "/com/steampowered/CecDaemon1/Daemon"
+CEC_DAEMON_INTERFACE = "com.steampowered.CecDaemon1.Daemon1"
+CEC_DEVICE_PATH = "/com/steampowered/CecDaemon1/Devices/Cec0"
+CEC_DEVICE_INTERFACE = "com.steampowered.CecDaemon1.CecDevice1"
+DEFAULT_CONFIG = "/etc/steamos-cec-toolkit.conf"
+
+logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+LOG = logging.getLogger("steamos-cec-boot-wake")
+
+
+def read_config(path: str = DEFAULT_CONFIG) -> dict[str, str]:
+    config: dict[str, str] = {}
+    try:
+        with open(path, encoding="utf-8") as file:
+            for raw_line in file:
+                line = raw_line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, value = line.split("=", 1)
+                config[key.strip()] = value.strip().strip('"').strip("'")
+    except FileNotFoundError:
+        pass
+    return config
+
+
+def run_busctl(args: list[str], timeout: int = 8) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["busctl", "--user", *args],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        timeout=timeout,
+        check=False,
+    )
+
+
+def source_is_active() -> bool:
+    result = run_busctl(
+        [
+            "get-property",
+            CEC_BUS,
+            CEC_DEVICE_PATH,
+            CEC_DEVICE_INTERFACE,
+            "Active",
+        ],
+        timeout=5,
+    )
+    return result.returncode == 0 and result.stdout.strip() == "b true"
+
+
+def wake_source() -> subprocess.CompletedProcess[str]:
+    return run_busctl(
+        [
+            "call",
+            CEC_BUS,
+            CEC_DAEMON_PATH,
+            CEC_DAEMON_INTERFACE,
+            "Wake",
+        ],
+        timeout=10,
+    )
+
+
+def main() -> int:
+    config = read_config(os.environ.get("STEAMOS_CEC_CONFIG", DEFAULT_CONFIG))
+    delay = float(config.get("BOOT_WAKE_DELAY_SECONDS", "8"))
+    attempts = int(config.get("BOOT_WAKE_ATTEMPTS", "4"))
+
+    if delay > 0:
+      time.sleep(delay)
+
+    for attempt in range(1, attempts + 1):
+        if source_is_active():
+            LOG.info("SteamOS HDMI-CEC source is already active; boot wake is complete")
+            return 0
+
+        result = wake_source()
+        if result.returncode != 0:
+            LOG.warning("Boot wake attempt %d failed: %s", attempt, result.stdout.strip())
+        else:
+            LOG.info("Sent boot wake/input activation attempt %d", attempt)
+
+        time.sleep(2)
+
+    if source_is_active():
+        LOG.info("SteamOS HDMI-CEC source activated after boot wake retries")
+        return 0
+
+    LOG.warning("SteamOS HDMI-CEC source was not confirmed active after boot wake retries")
+    return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

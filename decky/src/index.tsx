@@ -33,6 +33,7 @@ type Status = {
   usb_wake_helper_exists?: boolean;
   cec_permissions_helper_exists?: boolean;
   sudoers_exists?: boolean;
+  boot_wake_script_exists?: boolean;
   cec_device?: {
     device: string;
     exists: boolean;
@@ -208,6 +209,7 @@ function needsInstallHelp(status: Status | null): boolean {
     !status.power_standby_helper_exists ||
     !status.usb_wake_helper_exists ||
     !status.cec_permissions_helper_exists ||
+    !status.boot_wake_script_exists ||
     !status.cec_device?.readable ||
     !status.cec_device?.writable ||
     !status.sudoers_exists ||
@@ -244,6 +246,9 @@ function missingItems(status: Status | null): string[] {
   }
   if (!status.volume_script_exists) {
     items.push("volume wrapper");
+  }
+  if (!status.boot_wake_script_exists) {
+    items.push("boot wake helper");
   }
   if (!status.external_volume_script_exists) {
     items.push("ExternalVolume shim");
@@ -462,6 +467,7 @@ function Content() {
   }, []);
 
   const steamButton = status?.services?.["steam-button"];
+  const bootWake = status?.services?.["boot-wake"];
   const tvStandby = status?.services?.["tv-standby"];
   const gamescopeRecovery = status?.services?.["gamescope-recovery"];
   const powerStandby = status?.system_services?.["power-standby"];
@@ -533,6 +539,15 @@ function Content() {
             checked={!!steamButton?.is_enabled}
             disabled={busy}
             onChange={(enabled: boolean) => void runAction(() => setService("steam-button", enabled))}
+          />
+        </PanelSectionRow>
+        <PanelSectionRow>
+          <ToggleField
+            label="SteamOS Start Wakes TV"
+            description="Wake the TV/AVR and select this input when SteamOS starts"
+            checked={!!bootWake?.is_enabled}
+            disabled={busy || !status?.boot_wake_script_exists}
+            onChange={(enabled: boolean) => void runAction(() => setService("boot-wake", enabled))}
           />
         </PanelSectionRow>
         <PanelSectionRow>

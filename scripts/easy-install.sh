@@ -78,6 +78,7 @@ if [[ ! -d "$HOME/homebrew" ]]; then
 fi
 
 enable_steam_button=0
+enable_boot_wake=0
 enable_tv_standby=0
 enable_gamescope_recovery=0
 enable_before_sleep=0
@@ -85,6 +86,9 @@ enable_usb_wake=0
 
 if ask_yes_no "Enable Steam button/controller wake and input switching?" yes; then
   enable_steam_button=1
+fi
+if ask_yes_no "Enable wake and input switching when SteamOS starts?" no; then
+  enable_boot_wake=1
 fi
 if ask_yes_no "Enable TV standby suspends SteamOS?" no; then
   enable_tv_standby=1
@@ -122,6 +126,9 @@ cd "$WORKDIR"
 install_args=()
 if [[ "$enable_steam_button" -eq 1 ]]; then
   install_args+=(--enable-steam-button)
+fi
+if [[ "$enable_boot_wake" -eq 1 ]]; then
+  install_args+=(--enable-boot-wake)
 fi
 if [[ "$enable_tv_standby" -eq 1 ]]; then
   install_args+=(--enable-tv-standby-suspend)

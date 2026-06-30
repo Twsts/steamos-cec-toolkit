@@ -35,6 +35,12 @@ STEAM_BUTTON_REPORT_ID=0x45
 STEAM_BUTTON_BYTE=4
 STEAM_BUTTON_MASK=0x01
 
+# Optional boot/session-start source activation.
+# The boot wake service waits briefly for SteamOS/cecd to settle, then sends
+# standard CEC wake/input activation if this source is not already active.
+BOOT_WAKE_DELAY_SECONDS=8
+BOOT_WAKE_ATTEMPTS=4
+
 # Optional USB wake from suspend support.
 # This enables /sys/.../power/wakeup only for USB devices whose manufacturer or
 # product names match controller/Bluetooth-related terms and do not match

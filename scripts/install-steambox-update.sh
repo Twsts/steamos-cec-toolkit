@@ -35,6 +35,7 @@ for user_script in \
   steamos-cec-volume \
   steamos-cec-toolkitctl \
   steamos-cec-external-volume \
+  steamos-cec-boot-wake \
   steamos-cec-steam-button \
   steamos-cec-tv-standby-suspend \
   steamos-cec-gamescope-recovery
@@ -46,6 +47,7 @@ do
 done
 
 for user_unit in \
+  steamos-cec-boot-wake.service \
   steamos-cec-steam-button.service \
   steamos-cec-tv-standby-suspend.service \
   steamos-cec-gamescope-recovery.service
@@ -131,6 +133,7 @@ chown -R root:root "$PLUGIN_DIR/steamos-cec-toolkit"
 chmod -R a+rX "$PLUGIN_DIR/steamos-cec-toolkit"
 
 run_user_systemctl daemon-reload
+run_user_systemctl try-restart steamos-cec-boot-wake.service || true
 run_user_systemctl try-restart steamos-cec-steam-button.service || true
 run_user_systemctl try-restart steamos-cec-gamescope-recovery.service || true
 systemctl restart plugin_loader.service

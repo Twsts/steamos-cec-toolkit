@@ -14,6 +14,8 @@ It was built for a living-room SteamOS box where:
 
 - A controller Home/Guide/Steam-button press should wake/power on the TV/AVR
   over HDMI-CEC and switch the active input back to the SteamOS box.
+- SteamOS can optionally wake/power on the TV/AVR and select the SteamOS input
+  automatically when Game Mode starts after cold boot.
 - SteamOS should be able to send TV standby when the system sleeps or shuts
   down.
 - SteamOS can optionally suspend when the TV broadcasts HDMI-CEC standby.
@@ -118,6 +120,7 @@ User files:
 ```text
 ~/.local/bin/steamos-cec-volume
 ~/.local/bin/steamos-cec-external-volume
+~/.local/bin/steamos-cec-boot-wake
 ~/.local/bin/steamos-cec-steam-button
 ~/.local/bin/steamos-cec-tv-standby-suspend
 ~/.local/bin/steamos-cec-gamescope-recovery
@@ -259,6 +262,7 @@ Install everything:
 ```bash
 ./install.sh \
   --enable-steam-button \
+  --enable-boot-wake \
   --enable-tv-standby-suspend \
   --enable-gamescope-recovery \
   --enable-before-sleep \
@@ -309,7 +313,7 @@ can:
 - show ExternalVolume/toolkit status
 - toggle SteamOS CEC volume buttons on/off so you can switch between relative
   `+ / -` control and the normal SteamOS volume bar
-- toggle controller wake/input switching, TV standby suspend, SteamOS
+- toggle controller wake/input switching, boot wake/input switching, TV standby suspend, SteamOS
   sleep/shutdown TV standby, Bluetooth/controller wake from suspend, and
   Gamescope recovery
 - discover CEC devices and choose the volume initiator/audio target from
@@ -484,6 +488,15 @@ It triggers on:
 On a working CEC topology this is the same behavior users expect from a console:
 press the controller button, the display wakes, the AVR/TV selects the SteamOS
 input, and Game Mode appears.
+
+## Boot Wake and Input Switching
+
+The optional `steamos-cec-boot-wake` service runs once when the SteamOS user
+session starts. It waits briefly for `cecd`, checks whether the SteamOS
+HDMI-CEC source is already active, and if not sends SteamOS' standard CEC wake
+command with retries. This is intended for console-style cold boot behavior:
+power on the SteamOS machine, then let it wake the TV/AVR and select the
+SteamOS input automatically.
 
 The Steam Controller HID fallback uses this default report parsing:
 
