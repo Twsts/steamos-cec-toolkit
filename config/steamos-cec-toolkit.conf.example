@@ -41,6 +41,7 @@ STEAM_BUTTON_MASK=0x01
 # standard CEC wake/input activation if this source is not already active.
 BOOT_WAKE_DELAY_SECONDS=8
 BOOT_WAKE_ATTEMPTS=4
+BOOT_WAKE_RETRY_SECONDS=5
 
 # Optional USB wake from suspend support.
 # This enables /sys/.../power/wakeup only for USB devices whose manufacturer or

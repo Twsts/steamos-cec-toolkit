@@ -143,15 +143,14 @@ def wake_source() -> subprocess.CompletedProcess[str]:
 def main() -> int:
     delay = float(CONFIG.get("BOOT_WAKE_DELAY_SECONDS", "8"))
     attempts = int(CONFIG.get("BOOT_WAKE_ATTEMPTS", "4"))
+    retry_seconds = float(CONFIG.get("BOOT_WAKE_RETRY_SECONDS", "5"))
 
     if delay > 0:
         time.sleep(delay)
 
     for attempt in range(1, attempts + 1):
-        active_before = source_is_active()
-        if active_before:
-            LOG.info("SteamOS HDMI-CEC source reports active; still sending raw wake/input activation")
-
+        if source_is_active():
+            LOG.info("SteamOS HDMI-CEC source reports active before attempt %d; sending wake/input anyway", attempt)
         raw_wake()
         result = wake_source()
         if result.returncode != 0:
@@ -159,17 +158,11 @@ def main() -> int:
         else:
             LOG.info("Sent boot wake/input activation attempt %d", attempt)
 
-        time.sleep(2)
-        if source_is_active():
-            LOG.info("SteamOS HDMI-CEC source is active after boot wake attempt %d", attempt)
-            return 0
+        if attempt < attempts:
+            time.sleep(retry_seconds)
 
-    if source_is_active():
-        LOG.info("SteamOS HDMI-CEC source activated after boot wake retries")
-        return 0
-
-    LOG.warning("SteamOS HDMI-CEC source was not confirmed active after boot wake retries")
-    return 1
+    LOG.info("Finished boot wake/input activation attempts")
+    return 0
 
 
 if __name__ == "__main__":
