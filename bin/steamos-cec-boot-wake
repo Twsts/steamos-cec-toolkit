@@ -35,6 +35,16 @@ def read_config(path: str = DEFAULT_CONFIG) -> dict[str, str]:
     return config
 
 
+SYSTEM_CONFIG = read_config(os.environ.get("STEAMOS_CEC_CONFIG", DEFAULT_CONFIG))
+STEAMOS_CEC_USER = SYSTEM_CONFIG.get("STEAMOS_CEC_USER", "deck")
+USER_CONFIG = f"/home/{STEAMOS_CEC_USER}/.config/steamos-cec-toolkit/config.conf"
+CONFIG = {**SYSTEM_CONFIG, **read_config(USER_CONFIG)}
+CEC_DEVICE = CONFIG.get("CEC_DEVICE", "/dev/cec0")
+TV_LOGICAL_ADDRESS = CONFIG.get("TV_LOGICAL_ADDRESS", "0")
+CEC_PLAYBACK_LOGICAL_ADDRESS = CONFIG.get("CEC_PLAYBACK_LOGICAL_ADDRESS", "4")
+CEC_PHYSICAL_ADDRESS = CONFIG.get("CEC_PHYSICAL_ADDRESS", "")
+
+
 def run_busctl(args: list[str], timeout: int = 8) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         ["busctl", "--user", *args],
@@ -44,6 +54,67 @@ def run_busctl(args: list[str], timeout: int = 8) -> subprocess.CompletedProcess
         timeout=timeout,
         check=False,
     )
+
+
+def raw_cec(command: list[str]) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["cec-ctl", "-d", CEC_DEVICE, "-s", "--raw-msg", *command],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        timeout=8,
+        check=False,
+    )
+
+
+def physical_address() -> str:
+    if CEC_PHYSICAL_ADDRESS:
+        return CEC_PHYSICAL_ADDRESS
+    result = subprocess.run(
+        ["cec-ctl", "-d", CEC_DEVICE, "--show-topology"],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        timeout=8,
+        check=False,
+    )
+    for line in result.stdout.splitlines():
+        if "Physical Address" in line:
+            value = line.split(":", 1)[-1].strip()
+            if value and value != "f.f.f.f":
+                return value
+    return "3.0.0.0"
+
+
+def physical_address_payload() -> str:
+    parts = [int(part, 16) for part in physical_address().split(".")]
+    if len(parts) != 4 or any(part < 0 or part > 15 for part in parts):
+        return "0x30:0x00"
+    return f"0x{(parts[0] << 4) | parts[1]:02x}:0x{(parts[2] << 4) | parts[3]:02x}"
+
+
+def raw_wake() -> None:
+    if not os.path.exists(CEC_DEVICE):
+        LOG.warning("CEC device %s is missing; cannot send raw wake", CEC_DEVICE)
+        return
+
+    commands = [
+        ["-f", CEC_PLAYBACK_LOGICAL_ADDRESS, "-t", TV_LOGICAL_ADDRESS, "--custom-command", "cmd=0x04"],
+        ["-f", CEC_PLAYBACK_LOGICAL_ADDRESS, "-t", TV_LOGICAL_ADDRESS, "--custom-command", "cmd=0x0d"],
+        [
+            "-f",
+            CEC_PLAYBACK_LOGICAL_ADDRESS,
+            "-t",
+            "15",
+            "--custom-command",
+            f"cmd=0x82,payload={physical_address_payload()}",
+        ],
+    ]
+    for command in commands:
+        result = raw_cec(command)
+        if result.returncode != 0:
+            LOG.warning("Raw CEC wake command failed: %s", result.stdout.strip())
+        time.sleep(0.25)
 
 
 def source_is_active() -> bool:
@@ -74,18 +145,18 @@ def wake_source() -> subprocess.CompletedProcess[str]:
 
 
 def main() -> int:
-    config = read_config(os.environ.get("STEAMOS_CEC_CONFIG", DEFAULT_CONFIG))
-    delay = float(config.get("BOOT_WAKE_DELAY_SECONDS", "8"))
-    attempts = int(config.get("BOOT_WAKE_ATTEMPTS", "4"))
+    delay = float(CONFIG.get("BOOT_WAKE_DELAY_SECONDS", "8"))
+    attempts = int(CONFIG.get("BOOT_WAKE_ATTEMPTS", "4"))
 
     if delay > 0:
-      time.sleep(delay)
+        time.sleep(delay)
 
     for attempt in range(1, attempts + 1):
-        if source_is_active():
-            LOG.info("SteamOS HDMI-CEC source is already active; boot wake is complete")
-            return 0
+        active_before = source_is_active()
+        if active_before:
+            LOG.info("SteamOS HDMI-CEC source reports active; still sending raw wake/input activation")
 
+        raw_wake()
         result = wake_source()
         if result.returncode != 0:
             LOG.warning("Boot wake attempt %d failed: %s", attempt, result.stdout.strip())
@@ -93,6 +164,9 @@ def main() -> int:
             LOG.info("Sent boot wake/input activation attempt %d", attempt)
 
         time.sleep(2)
+        if source_is_active():
+            LOG.info("SteamOS HDMI-CEC source is active after boot wake attempt %d", attempt)
+            return 0
 
     if source_is_active():
         LOG.info("SteamOS HDMI-CEC source activated after boot wake retries")

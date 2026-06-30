@@ -732,6 +732,54 @@ def set_config(updates: dict[str, str]) -> dict[str, Any]:
     return payload
 
 
+def physical_address_payload(config: dict[str, str]) -> str:
+    physical = config.get("CEC_PHYSICAL_ADDRESS", "")
+    if not physical:
+        result = run(["cec-ctl", "-d", config.get("CEC_DEVICE", "/dev/cec0"), "--show-topology"], timeout=8)
+        for line in result["stdout"].splitlines():
+            if "Physical Address" in line:
+                value = line.split(":", 1)[-1].strip()
+                if value and value != "f.f.f.f":
+                    physical = value
+                    break
+    if not physical:
+        physical = "3.0.0.0"
+    try:
+        parts = [int(part, 16) for part in physical.split(".")]
+    except ValueError:
+        return "0x30:0x00"
+    if len(parts) != 4 or any(part < 0 or part > 15 for part in parts):
+        return "0x30:0x00"
+    return f"0x{(parts[0] << 4) | parts[1]:02x}:0x{(parts[2] << 4) | parts[3]:02x}"
+
+
+def raw_wake(config: dict[str, str]) -> list[dict[str, Any]]:
+    cec_device = config.get("CEC_DEVICE", "/dev/cec0")
+    playback = config.get("CEC_PLAYBACK_LOGICAL_ADDRESS", "4")
+    tv = config.get("TV_LOGICAL_ADDRESS", "0")
+    commands = [
+        ["cec-ctl", "-d", cec_device, "-s", "--raw-msg", "-f", playback, "-t", tv, "--custom-command", "cmd=0x04"],
+        ["cec-ctl", "-d", cec_device, "-s", "--raw-msg", "-f", playback, "-t", tv, "--custom-command", "cmd=0x0d"],
+        [
+            "cec-ctl",
+            "-d",
+            cec_device,
+            "-s",
+            "--raw-msg",
+            "-f",
+            playback,
+            "-t",
+            "15",
+            "--custom-command",
+            f"cmd=0x82,payload={physical_address_payload(config)}",
+        ],
+    ]
+    results: list[dict[str, Any]] = []
+    for command in commands:
+        results.append(run(command, timeout=8))
+    return results
+
+
 def repair_cec_permissions() -> dict[str, Any]:
     if not CEC_PERMISSIONS_HELPER.exists():
         payload = status()
@@ -759,6 +807,8 @@ def test_volume(action: str) -> dict[str, Any]:
 
 
 def wake_tv() -> dict[str, Any]:
+    config = read_config()
+    raw_results = raw_wake(config)
     result = run(
         [
             "busctl",
@@ -771,7 +821,14 @@ def wake_tv() -> dict[str, Any]:
         ]
     )
     payload = status()
-    payload["action"] = result
+    payload["action"] = {
+        "ok": result["ok"] or any(raw_result["ok"] for raw_result in raw_results),
+        "returncode": result["returncode"],
+        "stdout": "\n".join(
+            [raw_result["stdout"] for raw_result in raw_results if raw_result["stdout"]]
+            + ([result["stdout"]] if result["stdout"] else [])
+        ),
+    }
     return payload
 
 
