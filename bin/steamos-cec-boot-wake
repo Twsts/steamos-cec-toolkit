@@ -70,19 +70,6 @@ def raw_cec(command: list[str]) -> subprocess.CompletedProcess[str]:
 def physical_address() -> str:
     if CEC_PHYSICAL_ADDRESS:
         return CEC_PHYSICAL_ADDRESS
-    result = subprocess.run(
-        ["cec-ctl", "-d", CEC_DEVICE, "--show-topology"],
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.DEVNULL,
-        timeout=8,
-        check=False,
-    )
-    for line in result.stdout.splitlines():
-        if "Physical Address" in line:
-            value = line.split(":", 1)[-1].strip()
-            if value and value != "f.f.f.f":
-                return value
     return "3.0.0.0"
 
 

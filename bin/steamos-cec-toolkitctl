@@ -733,17 +733,7 @@ def set_config(updates: dict[str, str]) -> dict[str, Any]:
 
 
 def physical_address_payload(config: dict[str, str]) -> str:
-    physical = config.get("CEC_PHYSICAL_ADDRESS", "")
-    if not physical:
-        result = run(["cec-ctl", "-d", config.get("CEC_DEVICE", "/dev/cec0"), "--show-topology"], timeout=8)
-        for line in result["stdout"].splitlines():
-            if "Physical Address" in line:
-                value = line.split(":", 1)[-1].strip()
-                if value and value != "f.f.f.f":
-                    physical = value
-                    break
-    if not physical:
-        physical = "3.0.0.0"
+    physical = config.get("CEC_PHYSICAL_ADDRESS", "3.0.0.0")
     try:
         parts = [int(part, 16) for part in physical.split(".")]
     except ValueError:
