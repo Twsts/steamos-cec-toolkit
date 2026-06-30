@@ -1,7 +1,7 @@
 import { callable, definePlugin } from "@decky/api";
 import { ButtonItem, DropdownItem, PanelSection, PanelSectionRow, ToggleField } from "@decky/ui";
 import { useEffect, useState } from "react";
-import { FaSyncAlt, FaTv } from "react-icons/fa";
+import { FaTv } from "react-icons/fa";
 
 type ServiceState = {
   unit: string;
@@ -232,54 +232,26 @@ function statusColor(level: StatusLevel): string {
   return "#8a98a8";
 }
 
-function StatusCard({ status, busy, onRefresh }: {
-  status: Status | null;
-  busy: boolean;
-  onRefresh: () => void;
-}) {
+function StatusCard({ status }: { status: Status | null }) {
   const summary = statusSummary(status);
   const color = statusColor(summary.level);
 
   return (
-    <div style={{ display: "flex", gap: "10px", alignItems: "flex-start", justifyContent: "space-between" }}>
-      <div style={{ display: "flex", gap: "10px", alignItems: "flex-start", minWidth: 0 }}>
-        <div
-          style={{
-            width: "10px",
-            height: "10px",
-            borderRadius: "50%",
-            background: color,
-            marginTop: "5px",
-            flex: "0 0 auto",
-          }}
-        />
-        <div>
-          <div style={{ color, fontWeight: 600 }}>{summary.title}</div>
-          <div style={{ fontSize: "12px", opacity: 0.78, lineHeight: 1.35 }}>{summary.detail}</div>
-        </div>
-      </div>
-      <button
-        type="button"
-        aria-label="Refresh status"
-        title="Refresh status"
-        disabled={busy}
-        onClick={onRefresh}
+    <div style={{ display: "flex", gap: "10px", alignItems: "flex-start" }}>
+      <div
         style={{
-          width: "32px",
-          height: "32px",
+          width: "10px",
+          height: "10px",
+          borderRadius: "50%",
+          background: color,
+          marginTop: "5px",
           flex: "0 0 auto",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          border: 0,
-          borderRadius: "4px",
-          color: "#dfe3e6",
-          background: busy ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.14)",
-          opacity: busy ? 0.55 : 1,
         }}
-      >
-        <FaSyncAlt />
-      </button>
+      />
+      <div>
+        <div style={{ color, fontWeight: 600 }}>{summary.title}</div>
+        <div style={{ fontSize: "12px", opacity: 0.78, lineHeight: 1.35 }}>{summary.detail}</div>
+      </div>
     </div>
   );
 }
@@ -606,7 +578,7 @@ function Content() {
     <>
       <PanelSection title="Status">
         <PanelSectionRow>
-          <StatusCard status={status} busy={busy} onRefresh={() => void refresh()} />
+          <StatusCard status={status} />
         </PanelSectionRow>
       </PanelSection>
 

@@ -4,10 +4,11 @@ set -euo pipefail
 DECK_USER="${DECK_USER:-deck}"
 DECK_HOME="${DECK_HOME:-/home/$DECK_USER}"
 PLUGIN_ZIP="${PLUGIN_ZIP:-$DECK_HOME/steamos-cec-toolkit-decky.zip}"
-STAGED_BIN_DIR="${STAGED_BIN_DIR:-$DECK_HOME/steamos-cec-updated-bin}"
 PLUGIN_DIR="${PLUGIN_DIR:-$DECK_HOME/homebrew/plugins}"
 ROOT_HELPER_DIR="/var/lib/steamos-cec-toolkit"
 SUDOERS_FILE="/etc/sudoers.d/zz-steamos-cec-toolkit-volume"
+PROJECT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+STAGED_BIN_DIR="${STAGED_BIN_DIR:-}"
 
 if [[ "$(id -u)" -ne 0 ]]; then
   echo "usage: sudo bash $0" >&2
@@ -20,6 +21,23 @@ run_user_systemctl() {
     XDG_RUNTIME_DIR="/run/user/$DECK_UID" \
     DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$DECK_UID/bus" \
     systemctl --user "$@"
+}
+
+source_file() {
+  local relative_path="$1"
+  local flat_name="${relative_path##*/}"
+
+  if [[ -n "$STAGED_BIN_DIR" && -f "$STAGED_BIN_DIR/$flat_name" ]]; then
+    printf '%s\n' "$STAGED_BIN_DIR/$flat_name"
+    return 0
+  fi
+
+  if [[ -f "$PROJECT_DIR/$relative_path" ]]; then
+    printf '%s\n' "$PROJECT_DIR/$relative_path"
+    return 0
+  fi
+
+  return 1
 }
 
 if [[ ! -f "$PLUGIN_ZIP" ]]; then
@@ -40,8 +58,8 @@ for user_script in \
   steamos-cec-tv-standby-suspend \
   steamos-cec-gamescope-recovery
 do
-  if [[ -f "$STAGED_BIN_DIR/$user_script" ]]; then
-    install -o "$DECK_USER" -g "$DECK_USER" -m 0755 "$STAGED_BIN_DIR/$user_script" \
+  if src="$(source_file "bin/$user_script")"; then
+    install -o "$DECK_USER" -g "$DECK_USER" -m 0755 "$src" \
       "$DECK_HOME/.local/bin/$user_script"
   fi
 done
@@ -52,68 +70,68 @@ for user_unit in \
   steamos-cec-tv-standby-suspend.service \
   steamos-cec-gamescope-recovery.service
 do
-  if [[ -f "$STAGED_BIN_DIR/$user_unit" ]]; then
-    install -o "$DECK_USER" -g "$DECK_USER" -m 0644 "$STAGED_BIN_DIR/$user_unit" \
+  if src="$(source_file "systemd/user/$user_unit")"; then
+    install -o "$DECK_USER" -g "$DECK_USER" -m 0644 "$src" \
       "$DECK_HOME/.config/systemd/user/$user_unit"
   fi
 done
 
-if [[ -f "$STAGED_BIN_DIR/steamos-cec-volume-raw" ]]; then
-  install -m 0755 "$STAGED_BIN_DIR/steamos-cec-volume-raw" \
+if src="$(source_file "bin/steamos-cec-volume-raw")"; then
+  install -m 0755 "$src" \
     "$ROOT_HELPER_DIR/steamos-cec-volume-raw"
 fi
 
-if [[ -f "$STAGED_BIN_DIR/steamos-cec-debug-monitor" ]]; then
-  install -m 0755 "$STAGED_BIN_DIR/steamos-cec-debug-monitor" \
+if src="$(source_file "bin/steamos-cec-debug-monitor")"; then
+  install -m 0755 "$src" \
     "$ROOT_HELPER_DIR/steamos-cec-debug-monitor"
 fi
 
-if [[ -f "$STAGED_BIN_DIR/steamos-cec-power-standby-control" ]]; then
-  install -m 0755 "$STAGED_BIN_DIR/steamos-cec-power-standby-control" \
+if src="$(source_file "bin/steamos-cec-power-standby-control")"; then
+  install -m 0755 "$src" \
     "$ROOT_HELPER_DIR/steamos-cec-power-standby-control"
 fi
 
-if [[ -f "$STAGED_BIN_DIR/steamos-cec-permissions-apply" ]]; then
-  install -m 0755 "$STAGED_BIN_DIR/steamos-cec-permissions-apply" \
+if src="$(source_file "bin/steamos-cec-permissions-apply")"; then
+  install -m 0755 "$src" \
     "$ROOT_HELPER_DIR/steamos-cec-permissions-apply"
 fi
 
-if [[ -f "$STAGED_BIN_DIR/steamos-cec-before-sleep" ]]; then
-  install -m 0755 "$STAGED_BIN_DIR/steamos-cec-before-sleep" \
+if src="$(source_file "bin/steamos-cec-before-sleep")"; then
+  install -m 0755 "$src" \
     "$ROOT_HELPER_DIR/steamos-cec-before-sleep"
 fi
 
-if [[ -f "$STAGED_BIN_DIR/steamos-cec-usb-wake-apply" ]]; then
-  install -m 0755 "$STAGED_BIN_DIR/steamos-cec-usb-wake-apply" \
+if src="$(source_file "bin/steamos-cec-usb-wake-apply")"; then
+  install -m 0755 "$src" \
     "$ROOT_HELPER_DIR/steamos-cec-usb-wake-apply"
 fi
 
-if [[ -f "$STAGED_BIN_DIR/steamos-cec-usb-wake-control" ]]; then
-  install -m 0755 "$STAGED_BIN_DIR/steamos-cec-usb-wake-control" \
+if src="$(source_file "bin/steamos-cec-usb-wake-control")"; then
+  install -m 0755 "$src" \
     "$ROOT_HELPER_DIR/steamos-cec-usb-wake-control"
 fi
 
-if [[ -f "$STAGED_BIN_DIR/steamos-cec-before-sleep.service" ]]; then
-  install -m 0644 "$STAGED_BIN_DIR/steamos-cec-before-sleep.service" \
+if src="$(source_file "systemd/system/steamos-cec-before-sleep.service")"; then
+  install -m 0644 "$src" \
     /etc/systemd/system/steamos-cec-before-sleep.service
   systemctl daemon-reload
 fi
 
-if [[ -f "$STAGED_BIN_DIR/steamos-cec-permissions.service" ]]; then
-  install -m 0644 "$STAGED_BIN_DIR/steamos-cec-permissions.service" \
+if src="$(source_file "systemd/system/steamos-cec-permissions.service")"; then
+  install -m 0644 "$src" \
     /etc/systemd/system/steamos-cec-permissions.service
   systemctl daemon-reload
   systemctl enable --now steamos-cec-permissions.service
 fi
 
-if [[ -f "$STAGED_BIN_DIR/70-steamos-cec-toolkit.rules" ]]; then
-  install -D -m 0644 "$STAGED_BIN_DIR/70-steamos-cec-toolkit.rules" \
+if src="$(source_file "udev/70-steamos-cec-toolkit.rules")"; then
+  install -D -m 0644 "$src" \
     /etc/udev/rules.d/70-steamos-cec-toolkit.rules
   udevadm control --reload-rules || true
 fi
 
-if [[ -f "$STAGED_BIN_DIR/steamos-cec-usb-wake.service" ]]; then
-  install -m 0644 "$STAGED_BIN_DIR/steamos-cec-usb-wake.service" \
+if src="$(source_file "systemd/system/steamos-cec-usb-wake.service")"; then
+  install -m 0644 "$src" \
     /etc/systemd/system/steamos-cec-usb-wake.service
   systemctl daemon-reload
 fi
