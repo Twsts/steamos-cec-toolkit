@@ -257,12 +257,13 @@ function ConfigDetails({ status }) {
         return null;
     }
     const cecDevice = configValue(status, "CEC_DEVICE", "/dev/cec0");
+    const physicalAddress = configValue(status, "CEC_PHYSICAL_ADDRESS", "Not discovered");
     const initiator = configValue(status, "CEC_VOLUME_INITIATOR", "0");
     const audioTarget = configValue(status, "CEC_AUDIO_LOGICAL_ADDRESS", "5");
     const cardName = configValue(status, "HDMI_ALSA_CARD_NAME", "alsa_card.pci-0000_03_00.1");
     const cardNick = configValue(status, "HDMI_ALSA_CARD_NICK", "HDA ATI HDMI");
     const route = configValue(status, "EXTERNAL_VOLUME_ROUTE", "hdmi-output-0");
-    return (SP_JSX.jsxs("div", { style: { fontSize: "12px", opacity: 0.8, lineHeight: 1.35 }, children: [SP_JSX.jsxs("div", { children: ["CEC device: ", cecDevice] }), SP_JSX.jsxs("div", { children: ["Volume path: logical ", initiator, " to ", audioTarget] }), SP_JSX.jsxs("div", { children: ["Route: ", route] }), SP_JSX.jsxs("div", { children: ["HDMI card: ", cardName, " / ", cardNick] })] }));
+    return (SP_JSX.jsxs("div", { style: { fontSize: "12px", opacity: 0.8, lineHeight: 1.35 }, children: [SP_JSX.jsxs("div", { children: ["CEC device: ", cecDevice] }), SP_JSX.jsxs("div", { children: ["Physical address: ", physicalAddress] }), SP_JSX.jsxs("div", { children: ["Volume path: logical ", initiator, " to ", audioTarget] }), SP_JSX.jsxs("div", { children: ["Route: ", route] }), SP_JSX.jsxs("div", { children: ["HDMI card: ", cardName, " / ", cardNick] })] }));
 }
 function ControllerWakeDetails({ discovery, status }) {
     const devices = discovery?.devices || status?.controller_wake?.gamepad_devices || [];

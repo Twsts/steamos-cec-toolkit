@@ -68,15 +68,19 @@ def raw_cec(command: list[str]) -> subprocess.CompletedProcess[str]:
 
 
 def physical_address() -> str:
-    if CEC_PHYSICAL_ADDRESS:
-        return CEC_PHYSICAL_ADDRESS
-    return "3.0.0.0"
+    return CEC_PHYSICAL_ADDRESS
 
 
-def physical_address_payload() -> str:
-    parts = [int(part, 16) for part in physical_address().split(".")]
+def physical_address_payload() -> str | None:
+    physical = physical_address()
+    if not physical:
+        return None
+    try:
+        parts = [int(part, 16) for part in physical.split(".")]
+    except ValueError:
+        return None
     if len(parts) != 4 or any(part < 0 or part > 15 for part in parts):
-        return "0x30:0x00"
+        return None
     return f"0x{(parts[0] << 4) | parts[1]:02x}:0x{(parts[2] << 4) | parts[3]:02x}"
 
 
@@ -88,15 +92,20 @@ def raw_wake() -> None:
     commands = [
         ["-f", CEC_PLAYBACK_LOGICAL_ADDRESS, "-t", TV_LOGICAL_ADDRESS, "--custom-command", "cmd=0x04"],
         ["-f", CEC_PLAYBACK_LOGICAL_ADDRESS, "-t", TV_LOGICAL_ADDRESS, "--custom-command", "cmd=0x0d"],
-        [
+    ]
+    active_source_payload = physical_address_payload()
+    if active_source_payload:
+        commands.append([
             "-f",
             CEC_PLAYBACK_LOGICAL_ADDRESS,
             "-t",
             "15",
             "--custom-command",
-            f"cmd=0x82,payload={physical_address_payload()}",
-        ],
-    ]
+            f"cmd=0x82,payload={active_source_payload}",
+        ])
+    else:
+        LOG.warning("CEC_PHYSICAL_ADDRESS is not configured; skipping ACTIVE_SOURCE")
+
     for command in commands:
         result = raw_cec(command)
         if result.returncode != 0:

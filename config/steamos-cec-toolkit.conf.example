@@ -5,7 +5,7 @@
 
 # CEC adapter exposed by the UGREEN DP-to-HDMI adapter or another CEC adapter.
 CEC_DEVICE=/dev/cec0
-CEC_PHYSICAL_ADDRESS=3.0.0.0
+CEC_PHYSICAL_ADDRESS=
 
 # SteamOS desktop user. Official Steam Deck/SteamOS images normally use deck.
 STEAMOS_CEC_USER=deck

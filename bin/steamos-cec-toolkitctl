@@ -171,6 +171,7 @@ def read_config_file(path: Path) -> dict[str, str]:
 def write_user_config(updates: dict[str, str]) -> None:
     allowed = {
         "CEC_DEVICE",
+        "CEC_PHYSICAL_ADDRESS",
         "CEC_VOLUME_INITIATOR",
         "CEC_AUDIO_LOGICAL_ADDRESS",
         "HDMI_ALSA_CARD_NAME",
@@ -228,6 +229,10 @@ def cec_label(logical: str, device_type: str, osd_name: str) -> str:
     return " - ".join(parts)
 
 
+def valid_physical_address(value: str) -> bool:
+    return bool(re.fullmatch(r"[0-9a-fA-F]\.[0-9a-fA-F]\.[0-9a-fA-F]\.[0-9a-fA-F]", value)) and value.lower() != "f.f.f.f"
+
+
 def discover_cec() -> dict[str, Any]:
     config = read_config()
     cec_device = config.get("CEC_DEVICE", "/dev/cec0")
@@ -250,6 +255,7 @@ def discover_cec() -> dict[str, Any]:
                 "devices": [],
                 "suggested": {
                     "CEC_DEVICE": available[0] if len(available) == 1 else cec_device,
+                    "CEC_PHYSICAL_ADDRESS": "",
                     "CEC_VOLUME_INITIATOR": "0",
                     "CEC_AUDIO_LOGICAL_ADDRESS": "5",
                 },
@@ -271,8 +277,14 @@ def discover_cec() -> dict[str, Any]:
     result = run(["cec-ctl", "-d", cec_device, "--show-topology"], timeout=12)
     devices: list[dict[str, str]] = []
     current: dict[str, str] | None = None
+    adapter_physical_address = ""
 
     for line in result["stdout"].splitlines():
+        if current is None and "Physical Address" in line:
+            value = line.split(":", 1)[-1].strip()
+            if valid_physical_address(value):
+                adapter_physical_address = value
+            continue
         match = re.search(r"System Information for device (\d+) \(([^)]+)\)", line)
         if match:
             if current:
@@ -322,6 +334,7 @@ def discover_cec() -> dict[str, Any]:
         "devices": devices,
         "suggested": {
             "CEC_DEVICE": cec_device,
+            "CEC_PHYSICAL_ADDRESS": adapter_physical_address,
             "CEC_VOLUME_INITIATOR": tv["logical_address"] if tv else "0",
             "CEC_AUDIO_LOGICAL_ADDRESS": audio["logical_address"] if audio else "5",
         },
@@ -330,6 +343,14 @@ def discover_cec() -> dict[str, Any]:
         "raw": result["stdout"],
     }
     if result["ok"]:
+        if adapter_physical_address:
+            try:
+                write_user_config({
+                    "CEC_DEVICE": cec_device,
+                    "CEC_PHYSICAL_ADDRESS": adapter_physical_address,
+                })
+            except ValueError:
+                pass
         DISCOVERY_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
         DISCOVERY_CACHE_FILE.write_text(json.dumps(payload, separators=(",", ":")), encoding="utf-8")
     return payload
@@ -733,13 +754,15 @@ def set_config(updates: dict[str, str]) -> dict[str, Any]:
 
 
 def physical_address_payload(config: dict[str, str]) -> str:
-    physical = config.get("CEC_PHYSICAL_ADDRESS", "3.0.0.0")
+    physical = config.get("CEC_PHYSICAL_ADDRESS", "")
+    if not physical:
+        return ""
     try:
         parts = [int(part, 16) for part in physical.split(".")]
     except ValueError:
-        return "0x30:0x00"
+        return ""
     if len(parts) != 4 or any(part < 0 or part > 15 for part in parts):
-        return "0x30:0x00"
+        return ""
     return f"0x{(parts[0] << 4) | parts[1]:02x}:0x{(parts[2] << 4) | parts[3]:02x}"
 
 
@@ -750,7 +773,10 @@ def raw_wake(config: dict[str, str]) -> list[dict[str, Any]]:
     commands = [
         ["cec-ctl", "-d", cec_device, "-s", "--raw-msg", "-f", playback, "-t", tv, "--custom-command", "cmd=0x04"],
         ["cec-ctl", "-d", cec_device, "-s", "--raw-msg", "-f", playback, "-t", tv, "--custom-command", "cmd=0x0d"],
-        [
+    ]
+    active_source_payload = physical_address_payload(config)
+    if active_source_payload:
+        commands.append([
             "cec-ctl",
             "-d",
             cec_device,
@@ -761,9 +787,8 @@ def raw_wake(config: dict[str, str]) -> list[dict[str, Any]]:
             "-t",
             "15",
             "--custom-command",
-            f"cmd=0x82,payload={physical_address_payload(config)}",
-        ],
-    ]
+            f"cmd=0x82,payload={active_source_payload}",
+        ])
     results: list[dict[str, Any]] = []
     for command in commands:
         results.append(run(command, timeout=8))

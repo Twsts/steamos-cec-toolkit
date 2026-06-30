@@ -380,6 +380,7 @@ function ConfigDetails({ status }: { status: Status | null }) {
   }
 
   const cecDevice = configValue(status, "CEC_DEVICE", "/dev/cec0");
+  const physicalAddress = configValue(status, "CEC_PHYSICAL_ADDRESS", "Not discovered");
   const initiator = configValue(status, "CEC_VOLUME_INITIATOR", "0");
   const audioTarget = configValue(status, "CEC_AUDIO_LOGICAL_ADDRESS", "5");
   const cardName = configValue(status, "HDMI_ALSA_CARD_NAME", "alsa_card.pci-0000_03_00.1");
@@ -389,6 +390,7 @@ function ConfigDetails({ status }: { status: Status | null }) {
   return (
     <div style={{ fontSize: "12px", opacity: 0.8, lineHeight: 1.35 }}>
       <div>CEC device: {cecDevice}</div>
+      <div>Physical address: {physicalAddress}</div>
       <div>Volume path: logical {initiator} to {audioTarget}</div>
       <div>Route: {route}</div>
       <div>HDMI card: {cardName} / {cardNick}</div>
