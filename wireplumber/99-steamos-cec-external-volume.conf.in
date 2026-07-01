@@ -9,7 +9,6 @@ monitor.alsa.rules = [
     matches = [
       {
         device.name = "@HDMI_ALSA_CARD_NAME@"
-        device.nick = "@HDMI_ALSA_CARD_NICK@"
       }
     ]
     actions = {

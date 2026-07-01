@@ -55,7 +55,6 @@ monitor.alsa.rules = [
     matches = [
       {
         device.name = "@HDMI_ALSA_CARD_NAME@"
-        device.nick = "@HDMI_ALSA_CARD_NICK@"
       }
     ]
     actions = {
@@ -911,7 +910,6 @@ def write_external_volume_files() -> None:
     wireplumber_config = (
         WIREPLUMBER_CONFIG_TEMPLATE
         .replace("@HDMI_ALSA_CARD_NAME@", hdmi_alsa_card_name)
-        .replace("@HDMI_ALSA_CARD_NICK@", hdmi_alsa_card_nick)
     )
     WIREPLUMBER_CONFIG.parent.mkdir(parents=True, exist_ok=True)
     WIREPLUMBER_CONFIG.write_text(wireplumber_config, encoding="utf-8")

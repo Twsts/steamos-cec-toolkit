@@ -160,7 +160,6 @@ if [[ "$enable_external_volume" -eq 1 ]]; then
   install -d "$HOME/.config/wireplumber/wireplumber.conf.d"
   sed \
     -e "s|@HDMI_ALSA_CARD_NAME@|$HDMI_ALSA_CARD_NAME|g" \
-    -e "s|@HDMI_ALSA_CARD_NICK@|$HDMI_ALSA_CARD_NICK|g" \
     "$PROJECT_DIR/wireplumber/99-steamos-cec-external-volume.conf.in" \
     > "$HOME/.config/wireplumber/wireplumber.conf.d/99-steamos-cec-external-volume.conf"
 fi
