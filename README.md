@@ -138,7 +138,9 @@ Controller wake support is passive. It does not remap, inject, block, or grab
 controller input. The generic path watches gamepad-like Linux input devices for
 known system button codes (`BTN_MODE`, `KEY_HOMEPAGE`, `KEY_HOME`) and ignores
 keyboard/mouse devices. The Steam Controller fallback still uses the original
-Steam Controller HID profile.
+Steam Controller HID profile, with support for both the older and newer
+Steam Controller / Steam Controller Puck firmware report formats observed in
+SteamOS updates.
 
 Root files:
 

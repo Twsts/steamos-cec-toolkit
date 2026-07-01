@@ -35,6 +35,10 @@ STEAM_BUTTON_EXCLUDED_PHYS=input6
 STEAM_BUTTON_REPORT_ID=0x45
 STEAM_BUTTON_BYTE=4
 STEAM_BUTTON_MASK=0x01
+STEAM_BUTTON_ALT_REPORT_ID=0x44
+STEAM_BUTTON_ALT_BYTE=1
+STEAM_BUTTON_ALT_VALUES="0x03,0x04"
+STEAM_BUTTON_ALT_DEBOUNCE_SECONDS=20
 
 # Optional boot/session-start source activation.
 # The boot wake service waits briefly for SteamOS/cecd to settle, then sends

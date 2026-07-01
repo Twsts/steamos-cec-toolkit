@@ -111,6 +111,14 @@ EXCLUDED_PHYS = CONFIG.get("STEAM_BUTTON_EXCLUDED_PHYS", "input6")
 REPORT_ID = int(CONFIG.get("STEAM_BUTTON_REPORT_ID", "0x45"), 0)
 BUTTON_BYTE = int(CONFIG.get("STEAM_BUTTON_BYTE", "4"), 0)
 BUTTON_MASK = int(CONFIG.get("STEAM_BUTTON_MASK", "0x01"), 0)
+ALT_REPORT_ID = int(CONFIG.get("STEAM_BUTTON_ALT_REPORT_ID", "0x44"), 0)
+ALT_BUTTON_BYTE = int(CONFIG.get("STEAM_BUTTON_ALT_BYTE", "1"), 0)
+ALT_BUTTON_VALUES = {
+    int(value.strip(), 0)
+    for value in CONFIG.get("STEAM_BUTTON_ALT_VALUES", "0x03,0x04").split(",")
+    if value.strip()
+}
+ALT_BUTTON_DEBOUNCE_SECONDS = float(CONFIG.get("STEAM_BUTTON_ALT_DEBOUNCE_SECONDS", "20"))
 ENABLE_GENERIC_INPUT = CONFIG.get("CONTROLLER_WAKE_GENERIC_INPUT", "1") not in {"0", "false", "False", "no"}
 ENABLE_STEAM_HID = CONFIG.get("CONTROLLER_WAKE_STEAM_HID", "1") not in {"0", "false", "False", "no"}
 CEC_DEVICE = CONFIG.get("CEC_DEVICE", "/dev/cec0")
@@ -461,10 +469,26 @@ def main() -> None:
     pending_short_press: dict[str, tuple[float, int]] = {}
     last_activation = 0.0
     last_resume_activation = 0.0
+    last_alt_activation: dict[str, float] = {}
     last_report_seen: dict[str, float] = {}
     report_seen_once: set[str] = set()
 
     while True:
+        now = time.monotonic()
+        for path, (released_at, reports_after_release) in list(pending_short_press.items()):
+            if (
+                now - released_at >= SHORT_PRESS_CONFIRM_SECONDS
+                and (
+                    reports_after_release >= SHORT_PRESS_CONFIRM_REPORTS
+                    or now - last_report_seen.get(path, released_at) >= SHORT_PRESS_CONFIRM_SECONDS
+                )
+                and now - last_activation >= BUTTON_DEBOUNCE_SECONDS
+            ):
+                last_activation = now
+                last_resume_activation = now
+                pending_short_press.pop(path, None)
+                activate_source("short Steam-button press")
+
         previous_resume_window_until = hid_resume_window_until
         last_wall, last_monotonic, hid_resume_window_until = update_system_resume_window(
             last_wall,
@@ -543,7 +567,23 @@ def main() -> None:
                     if now - last_activation < BUTTON_DEBOUNCE_SECONDS:
                         continue
                     last_activation = now
+                    last_resume_activation = now
                     activate_source(f"{GAMEPAD_HOME_CODES[code]} controller button")
+                continue
+
+            if (
+                len(data) > ALT_BUTTON_BYTE
+                and data[0] == ALT_REPORT_ID
+                and data[ALT_BUTTON_BYTE] in ALT_BUTTON_VALUES
+            ):
+                if (
+                    now - last_activation >= BUTTON_DEBOUNCE_SECONDS
+                    and now - last_alt_activation.get(path, 0.0) >= ALT_BUTTON_DEBOUNCE_SECONDS
+                ):
+                    last_activation = now
+                    last_resume_activation = now
+                    last_alt_activation[path] = now
+                    activate_source("Steam Controller system button")
                 continue
 
             if len(data) <= BUTTON_BYTE or data[0] != REPORT_ID:
