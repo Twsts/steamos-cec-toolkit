@@ -29,6 +29,9 @@ STARTUP_BASELINE_SECONDS = 2
 SHORT_PRESS_MAX_SECONDS = 1.5
 SHORT_PRESS_CONFIRM_SECONDS = 1.0
 SHORT_PRESS_CONFIRM_REPORTS = 20
+CEC_DEVICE_WAIT_SECONDS = 8.0
+CEC_DEVICE_WAIT_STEP_SECONDS = 0.5
+CEC_WAKE_RETRY_DELAYS = (0, 2, 3, 5, 8)
 
 INPUT_EVENT = struct.Struct("llHHI")
 EV_KEY = 0x01
@@ -241,6 +244,15 @@ def raw_cec(command: list[str]) -> subprocess.CompletedProcess[str]:
     )
 
 
+def wait_for_cec_device() -> bool:
+    deadline = time.monotonic() + CEC_DEVICE_WAIT_SECONDS
+    while time.monotonic() < deadline:
+        if os.path.exists(CEC_DEVICE):
+            return True
+        time.sleep(CEC_DEVICE_WAIT_STEP_SECONDS)
+    return os.path.exists(CEC_DEVICE)
+
+
 def physical_address() -> str:
     return CEC_PHYSICAL_ADDRESS
 
@@ -258,9 +270,31 @@ def physical_address_payload() -> str | None:
     return f"0x{(parts[0] << 4) | parts[1]:02x}:0x{(parts[2] << 4) | parts[3]:02x}"
 
 
+def raw_active_source() -> None:
+    if not wait_for_cec_device():
+        LOG.warning("CEC device %s is missing after waiting; cannot send ACTIVE_SOURCE", CEC_DEVICE)
+        return
+
+    active_source_payload = physical_address_payload()
+    if not active_source_payload:
+        LOG.warning("CEC_PHYSICAL_ADDRESS is not configured; skipping ACTIVE_SOURCE")
+        return
+
+    result = raw_cec([
+        "-f",
+        CEC_PLAYBACK_LOGICAL_ADDRESS,
+        "-t",
+        "15",
+        "--custom-command",
+        f"cmd=0x82,payload={active_source_payload}",
+    ])
+    if result.returncode != 0:
+        LOG.warning("ACTIVE_SOURCE failed: %s", result.stdout.strip())
+
+
 def raw_wake() -> None:
-    if not os.path.exists(CEC_DEVICE):
-        LOG.warning("CEC device %s is missing; cannot send raw wake", CEC_DEVICE)
+    if not wait_for_cec_device():
+        LOG.warning("CEC device %s is missing after waiting; cannot send raw wake", CEC_DEVICE)
         return
 
     commands = [
@@ -281,24 +315,12 @@ def raw_wake() -> None:
             "cmd=0x0d",
         ],
     ]
-    active_source_payload = physical_address_payload()
-    if active_source_payload:
-        commands.append([
-            "-f",
-            CEC_PLAYBACK_LOGICAL_ADDRESS,
-            "-t",
-            "15",
-            "--custom-command",
-            f"cmd=0x82,payload={active_source_payload}",
-        ])
-    else:
-        LOG.warning("CEC_PHYSICAL_ADDRESS is not configured; skipping ACTIVE_SOURCE")
-
     for command in commands:
         result = raw_cec(command)
         if result.returncode != 0:
             LOG.warning("Raw CEC wake command failed: %s", result.stdout.strip())
         time.sleep(0.25)
+    raw_active_source()
 
 
 def source_is_active() -> bool:
@@ -325,7 +347,7 @@ def activate_source(reason: str) -> None:
     if source_is_active():
         LOG.info("CEC source reports active; still sending raw wake/input activation (%s)", reason)
 
-    for attempt, delay in enumerate((0, 2, 3), start=1):
+    for attempt, delay in enumerate(CEC_WAKE_RETRY_DELAYS, start=1):
         if delay:
             time.sleep(delay)
         raw_wake()
@@ -337,11 +359,17 @@ def activate_source(reason: str) -> None:
                 result.stdout.strip(),
             )
             continue
+        time.sleep(1.0)
+        raw_active_source()
         time.sleep(0.5)
         if source_is_active():
             LOG.info("Woke display chain and activated HDMI source (%s, attempt %d)", reason, attempt)
             return
         LOG.info("CEC wake attempt %d did not activate this source", attempt)
+
+    for delay in (2, 5, 8):
+        time.sleep(delay)
+        raw_active_source()
 
     LOG.warning("Display wake/source activation did not complete after CEC retries")
 
@@ -487,9 +515,13 @@ def main() -> None:
                     pending_short_press.pop(path, None)
                     activate_source("short Steam-button press")
 
-            connected = (
+            steam_hid_awake = device_kinds.get(path) == "steam-hid" and (
+                (resumed and now >= startup_deadline)
+                or (first_report and now >= startup_deadline)
+            )
+            connected = steam_hid_awake or (
                 device_kinds.get(path) == "steam-hid"
-                and (resumed or (first_report and now >= startup_deadline))
+                and resumed
                 and now <= hid_resume_window_until
             )
             if (
