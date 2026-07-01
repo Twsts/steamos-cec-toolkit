@@ -26,6 +26,9 @@ SUDOERS_FILE = Path("/etc/sudoers.d/zz-steamos-cec-toolkit-volume")
 EXTERNAL_VOLUME_SCRIPT = Path.home() / ".local/bin/steamos-cec-external-volume"
 VOLUME_SCRIPT = Path.home() / ".local/bin/steamos-cec-volume"
 BOOT_WAKE_SCRIPT = Path.home() / ".local/bin/steamos-cec-boot-wake"
+STEAM_BUTTON_SCRIPT = Path.home() / ".local/bin/steamos-cec-steam-button"
+TV_STANDBY_SCRIPT = Path.home() / ".local/bin/steamos-cec-tv-standby-suspend"
+GAMESCOPE_RECOVERY_SCRIPT = Path.home() / ".local/bin/steamos-cec-gamescope-recovery"
 WIREPLUMBER_CONFIG = (
     Path.home()
     / ".config/wireplumber/wireplumber.conf.d/99-steamos-cec-external-volume.conf"
@@ -459,6 +462,12 @@ def discover_audio() -> dict[str, Any]:
     elif not cards:
         note = "No HDMI/DisplayPort ALSA card was detected from PipeWire."
 
+    if cards:
+        try:
+            write_user_config(suggested)
+        except ValueError:
+            pass
+
     return {
         "ok": bool(cards),
         "cards": cards,
@@ -684,9 +693,12 @@ def status() -> dict[str, Any]:
         "external_volume_script_exists": EXTERNAL_VOLUME_SCRIPT.exists(),
         "volume_script_exists": VOLUME_SCRIPT.exists(),
         "boot_wake_script_exists": BOOT_WAKE_SCRIPT.exists(),
+        "steam_button_script_exists": STEAM_BUTTON_SCRIPT.exists(),
+        "tv_standby_script_exists": TV_STANDBY_SCRIPT.exists(),
+        "gamescope_recovery_script_exists": GAMESCOPE_RECOVERY_SCRIPT.exists(),
         "external_volume": external_volume_state(),
         "controller_wake": {
-            "script_exists": (Path.home() / ".local/bin/steamos-cec-steam-button").exists(),
+            "script_exists": STEAM_BUTTON_SCRIPT.exists(),
             "generic_input_enabled": config.get("CONTROLLER_WAKE_GENERIC_INPUT", "1")
             not in {"0", "false", "False", "no"},
             "steam_hid_enabled": config.get("CONTROLLER_WAKE_STEAM_HID", "1")
@@ -710,6 +722,9 @@ def set_service(name: str, enabled: bool) -> dict[str, Any]:
     result = systemctl_user(action, state, unit)
     payload = status()
     payload["action"] = result
+    if not result["ok"]:
+        payload["ok"] = False
+        payload["error"] = result["stdout"] or f"Could not {'enable' if enabled else 'disable'} {unit}"
     return payload
 
 
@@ -915,6 +930,7 @@ def remove_external_volume_files() -> None:
 
 def set_external_volume(enabled: bool) -> dict[str, Any]:
     if enabled:
+        discover_audio()
         write_external_volume_files()
         systemctl_user("daemon-reload")
         systemctl_user("stop", "cec-audio-control.service")

@@ -260,6 +260,7 @@ Recommended first steps in the plugin:
   2. Test Wake TV / Select Input.
   3. If you want SteamOS volume buttons to control CEC audio, run Discover Audio Output, confirm Volume Initiator / Audio Target / HDMI Audio Card, then test Volume Up.
   4. Toggle features on or off under Features.
+  5. If CEC volume actions work but Quick Settings still shows a slider, reboot or restart Steam/Game Mode once.
 
 If Game Mode does not show the plugin immediately, restart Steam or reboot.
 DONE

@@ -44,6 +44,9 @@ type Status = {
   external_volume_script_exists?: boolean;
   volume_script_exists?: boolean;
   external_volume?: ExternalVolumeState;
+  steam_button_script_exists?: boolean;
+  tv_standby_script_exists?: boolean;
+  gamescope_recovery_script_exists?: boolean;
   controller_wake?: ControllerWakeState;
   services?: Record<string, ServiceState>;
   system_services?: Record<string, ServiceState>;
@@ -202,7 +205,7 @@ function statusSummary(status: Status | null): StatusSummary {
     return {
       level: "warn",
       title: "Volume needs restart",
-      detail: "CEC volume is enabled, but SteamOS has not attached relative volume yet.",
+      detail: "CEC volume is enabled. Restart Steam/Game Mode or reboot if Quick Settings still shows a slider.",
     };
   }
   if (!status.external_volume?.enabled) {
@@ -292,7 +295,10 @@ function needsInstallHelp(status: Status | null): boolean {
     !status.cec_device?.writable ||
     !status.sudoers_exists ||
     !status.volume_script_exists ||
-    !status.external_volume_script_exists
+    !status.external_volume_script_exists ||
+    !status.steam_button_script_exists ||
+    !status.tv_standby_script_exists ||
+    !status.gamescope_recovery_script_exists
   );
 }
 
@@ -327,6 +333,15 @@ function missingItems(status: Status | null): string[] {
   }
   if (!status.boot_wake_script_exists) {
     items.push("boot wake helper");
+  }
+  if (!status.steam_button_script_exists) {
+    items.push("controller wake helper");
+  }
+  if (!status.tv_standby_script_exists) {
+    items.push("TV standby suspend helper");
+  }
+  if (!status.gamescope_recovery_script_exists) {
+    items.push("Gamescope recovery helper");
   }
   if (!status.external_volume_script_exists) {
     items.push("ExternalVolume shim");
@@ -605,7 +620,7 @@ function Content() {
             label="Controller Button Wakes TV"
             description="Use controller Home/Guide buttons to wake the TV/AVR and select this input"
             checked={!!steamButton?.is_enabled}
-            disabled={busy}
+            disabled={busy || !status?.steam_button_script_exists}
             onChange={(enabled: boolean) => void runAction(() => setService("steam-button", enabled))}
           />
         </PanelSectionRow>
@@ -623,7 +638,7 @@ function Content() {
             label="TV Standby Suspends SteamOS"
             description="Suspend SteamOS when the TV broadcasts HDMI-CEC standby"
             checked={!!tvStandby?.is_enabled}
-            disabled={busy}
+            disabled={busy || !status?.tv_standby_script_exists}
             onChange={(enabled: boolean) => void runAction(() => setService("tv-standby", enabled))}
           />
         </PanelSectionRow>
@@ -650,7 +665,7 @@ function Content() {
             label="Gamescope Recovery"
             description="Restart Gamescope after CEC input activation if the display gets stuck"
             checked={!!gamescopeRecovery?.is_enabled}
-            disabled={busy}
+            disabled={busy || !status?.gamescope_recovery_script_exists}
             onChange={(enabled: boolean) => void runAction(() => setService("gamescope-recovery", enabled))}
           />
         </PanelSectionRow>

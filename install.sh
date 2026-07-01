@@ -91,17 +91,31 @@ if grep -qx 'HDMI_ALSA_CARD_NICK=HDA ATI HDMI' "$CONFIG_FILE" 2>/dev/null; then
   sudo sed -i 's/^HDMI_ALSA_CARD_NICK=HDA ATI HDMI$/HDMI_ALSA_CARD_NICK="HDA ATI HDMI"/' "$CONFIG_FILE"
 fi
 
-# shellcheck disable=SC1090
-source "$CONFIG_FILE"
-
-HDMI_ALSA_CARD_NAME="${HDMI_ALSA_CARD_NAME:-alsa_card.pci-0000_03_00.1}"
-HDMI_ALSA_CARD_NICK="${HDMI_ALSA_CARD_NICK:-HDA ATI HDMI}"
-
 install -d "$HOME/.local/bin"
 install -m 0755 "$PROJECT_DIR/bin/steamos-cec-volume" "$HOME/.local/bin/steamos-cec-volume"
 install -m 0755 "$PROJECT_DIR/bin/steamos-cec-toolkitctl" "$HOME/.local/bin/steamos-cec-toolkitctl"
 install -m 0755 "$PROJECT_DIR/bin/steamos-cec-external-volume" "$HOME/.local/bin/steamos-cec-external-volume"
 install -m 0755 "$PROJECT_DIR/bin/steamos-cec-boot-wake" "$HOME/.local/bin/steamos-cec-boot-wake"
+install -m 0755 "$PROJECT_DIR/bin/steamos-cec-steam-button" "$HOME/.local/bin/steamos-cec-steam-button"
+install -m 0755 "$PROJECT_DIR/bin/steamos-cec-tv-standby-suspend" \
+  "$HOME/.local/bin/steamos-cec-tv-standby-suspend"
+install -m 0755 "$PROJECT_DIR/bin/steamos-cec-gamescope-recovery" \
+  "$HOME/.local/bin/steamos-cec-gamescope-recovery"
+
+if [[ "$enable_external_volume" -eq 1 ]]; then
+  "$HOME/.local/bin/steamos-cec-toolkitctl" discover-audio >/dev/null 2>&1 || true
+fi
+
+# shellcheck disable=SC1090
+source "$CONFIG_FILE"
+USER_CONFIG_FILE="$HOME/.config/steamos-cec-toolkit/config.conf"
+if [[ -f "$USER_CONFIG_FILE" ]]; then
+  # shellcheck disable=SC1090
+  source "$USER_CONFIG_FILE"
+fi
+
+HDMI_ALSA_CARD_NAME="${HDMI_ALSA_CARD_NAME:-alsa_card.pci-0000_03_00.1}"
+HDMI_ALSA_CARD_NICK="${HDMI_ALSA_CARD_NICK:-HDA ATI HDMI}"
 
 sudo install -d -m 0755 /var/lib/steamos-cec-toolkit
 sudo install -m 0755 "$PROJECT_DIR/bin/steamos-cec-volume-raw" \
@@ -151,37 +165,20 @@ if [[ "$enable_external_volume" -eq 1 ]]; then
     > "$HOME/.config/wireplumber/wireplumber.conf.d/99-steamos-cec-external-volume.conf"
 fi
 
-if [[ "$enable_steam_button" -eq 1 ]]; then
-  install -m 0755 "$PROJECT_DIR/bin/steamos-cec-steam-button" "$HOME/.local/bin/steamos-cec-steam-button"
-  install -d "$HOME/.config/systemd/user"
-  install -m 0644 "$PROJECT_DIR/systemd/user/steamos-cec-steam-button.service" \
-    "$HOME/.config/systemd/user/steamos-cec-steam-button.service"
-fi
-
 install -d "$HOME/.config/systemd/user"
+install -m 0644 "$PROJECT_DIR/systemd/user/steamos-cec-steam-button.service" \
+  "$HOME/.config/systemd/user/steamos-cec-steam-button.service"
 install -m 0644 "$PROJECT_DIR/systemd/user/steamos-cec-boot-wake.service" \
   "$HOME/.config/systemd/user/steamos-cec-boot-wake.service"
+install -m 0644 "$PROJECT_DIR/systemd/user/steamos-cec-tv-standby-suspend.service" \
+  "$HOME/.config/systemd/user/steamos-cec-tv-standby-suspend.service"
+install -m 0644 "$PROJECT_DIR/systemd/user/steamos-cec-gamescope-recovery.service" \
+  "$HOME/.config/systemd/user/steamos-cec-gamescope-recovery.service"
 
-if [[ "$enable_tv_standby" -eq 1 ]]; then
+if [[ "$enable_tv_standby" -eq 1 || "$enable_gamescope_recovery" -eq 1 ]]; then
   if ! python3 -c 'import dbus_next' >/dev/null 2>&1; then
-    echo "warning: python module dbus_next is missing; TV standby service may fail" >&2
+    echo "warning: python module dbus_next is missing; TV standby/Gamescope recovery services may fail" >&2
   fi
-  install -m 0755 "$PROJECT_DIR/bin/steamos-cec-tv-standby-suspend" \
-    "$HOME/.local/bin/steamos-cec-tv-standby-suspend"
-  install -d "$HOME/.config/systemd/user"
-  install -m 0644 "$PROJECT_DIR/systemd/user/steamos-cec-tv-standby-suspend.service" \
-    "$HOME/.config/systemd/user/steamos-cec-tv-standby-suspend.service"
-fi
-
-if [[ "$enable_gamescope_recovery" -eq 1 ]]; then
-  if ! python3 -c 'import dbus_next' >/dev/null 2>&1; then
-    echo "warning: python module dbus_next is missing; Gamescope recovery service may fail" >&2
-  fi
-  install -m 0755 "$PROJECT_DIR/bin/steamos-cec-gamescope-recovery" \
-    "$HOME/.local/bin/steamos-cec-gamescope-recovery"
-  install -d "$HOME/.config/systemd/user"
-  install -m 0644 "$PROJECT_DIR/systemd/user/steamos-cec-gamescope-recovery.service" \
-    "$HOME/.config/systemd/user/steamos-cec-gamescope-recovery.service"
 fi
 
 systemctl --user daemon-reload
