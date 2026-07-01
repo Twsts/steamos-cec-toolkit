@@ -31,6 +31,15 @@ echo "Building SteamOS CEC Toolkit release assets for $VERSION"
 rm -rf "$RELEASE_DIR"
 install -d "$PLUGIN_PACKAGE_DIR"
 
+restore_version() {
+  if [[ -f "$RELEASE_DIR/VERSION.original" ]]; then
+    cp "$RELEASE_DIR/VERSION.original" "$PROJECT_DIR/VERSION"
+  fi
+}
+trap restore_version EXIT
+cp "$PROJECT_DIR/VERSION" "$RELEASE_DIR/VERSION.original"
+printf '%s\n' "$VERSION" > "$PROJECT_DIR/VERSION"
+
 (
   cd "$PROJECT_DIR/decky"
   npm run build
@@ -38,6 +47,7 @@ install -d "$PLUGIN_PACKAGE_DIR"
 )
 
 cp -a \
+  "$PROJECT_DIR/VERSION" \
   "$PROJECT_DIR/decky/plugin.json" \
   "$PROJECT_DIR/decky/package.json" \
   "$PROJECT_DIR/decky/main.py" \

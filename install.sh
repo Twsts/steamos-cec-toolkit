@@ -92,6 +92,8 @@ if grep -qx 'HDMI_ALSA_CARD_NICK=HDA ATI HDMI' "$CONFIG_FILE" 2>/dev/null; then
 fi
 
 install -d "$HOME/.local/bin"
+install -d "$HOME/.local/share/steamos-cec-toolkit"
+install -m 0644 "$PROJECT_DIR/VERSION" "$HOME/.local/share/steamos-cec-toolkit/VERSION"
 install -m 0755 "$PROJECT_DIR/bin/steamos-cec-volume" "$HOME/.local/bin/steamos-cec-volume"
 install -m 0755 "$PROJECT_DIR/bin/steamos-cec-toolkitctl" "$HOME/.local/bin/steamos-cec-toolkitctl"
 install -m 0755 "$PROJECT_DIR/bin/steamos-cec-external-volume" "$HOME/.local/bin/steamos-cec-external-volume"

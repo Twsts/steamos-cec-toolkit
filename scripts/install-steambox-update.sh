@@ -47,7 +47,13 @@ fi
 
 install -d -m 0755 "$ROOT_HELPER_DIR"
 install -d -o "$DECK_USER" -g "$DECK_USER" -m 0755 "$DECK_HOME/.local/bin"
+install -d -o "$DECK_USER" -g "$DECK_USER" -m 0755 "$DECK_HOME/.local/share/steamos-cec-toolkit"
 install -d -o "$DECK_USER" -g "$DECK_USER" -m 0755 "$DECK_HOME/.config/systemd/user"
+
+if src="$(source_file "VERSION")"; then
+  install -o "$DECK_USER" -g "$DECK_USER" -m 0644 "$src" \
+    "$DECK_HOME/.local/share/steamos-cec-toolkit/VERSION"
+fi
 
 for user_script in \
   steamos-cec-volume \

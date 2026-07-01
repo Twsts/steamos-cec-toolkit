@@ -23,6 +23,8 @@ POWER_STANDBY_HELPER = Path("/var/lib/steamos-cec-toolkit/steamos-cec-power-stan
 USB_WAKE_HELPER = Path("/var/lib/steamos-cec-toolkit/steamos-cec-usb-wake-control")
 CEC_PERMISSIONS_HELPER = Path("/var/lib/steamos-cec-toolkit/steamos-cec-permissions-apply")
 SUDOERS_FILE = Path("/etc/sudoers.d/zz-steamos-cec-toolkit-volume")
+INSTALLED_VERSION_FILE = Path.home() / ".local/share/steamos-cec-toolkit/VERSION"
+SOURCE_VERSION_FILE = Path(__file__).resolve().parent.parent / "VERSION"
 EXTERNAL_VOLUME_SCRIPT = Path.home() / ".local/bin/steamos-cec-external-volume"
 VOLUME_SCRIPT = Path.home() / ".local/bin/steamos-cec-volume"
 BOOT_WAKE_SCRIPT = Path.home() / ".local/bin/steamos-cec-boot-wake"
@@ -671,10 +673,22 @@ def cec_device_state(config: dict[str, str]) -> dict[str, Any]:
     }
 
 
+def toolkit_version() -> str:
+    for path in (INSTALLED_VERSION_FILE, SOURCE_VERSION_FILE):
+        try:
+            version = path.read_text(encoding="utf-8").strip()
+        except OSError:
+            continue
+        if version:
+            return version
+    return "unknown"
+
+
 def status() -> dict[str, Any]:
     config = read_config()
     return {
         "ok": True,
+        "version": toolkit_version(),
         "config_file": str(USER_CONFIG_FILE if USER_CONFIG_FILE.exists() else SYSTEM_CONFIG_FILE),
         "system_config_file": str(SYSTEM_CONFIG_FILE),
         "user_config_file": str(USER_CONFIG_FILE),

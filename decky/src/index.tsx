@@ -23,6 +23,7 @@ type ExternalVolumeState = {
 
 type Status = {
   ok: boolean;
+  version?: string;
   error?: string;
   config_exists?: boolean;
   config?: Record<string, string>;
@@ -266,6 +267,7 @@ function DiagnosticsDetails({ status }: { status: Status | null }) {
 
   return (
     <div style={{ fontSize: "12px", opacity: 0.8, lineHeight: 1.35 }}>
+      <div>Toolkit version: {status.version || "Unknown"}</div>
       <div>Root helper: {yesNo(status.root_helper_exists)}</div>
       <div>Debug helper: {yesNo(status.debug_helper_exists)}</div>
       <div>Power standby helper: {yesNo(status.power_standby_helper_exists)}</div>
