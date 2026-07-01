@@ -30,6 +30,11 @@ updates.
 
 ## Game Mode Still Shows a Normal Slider
 
+After first install or after enabling `CEC Volume Buttons`, reboot once before
+debugging this. The Decky volume action buttons can work before Steam/Game Mode
+has reloaded the PipeWire ExternalVolume route that changes Quick Settings from
+a slider to `+` / `-`.
+
 Check that WirePlumber has ExternalVolume enabled:
 
 ```bash

@@ -76,6 +76,11 @@ After installation, open Game Mode and use the `SteamOS CEC` Decky plugin:
    `HDMI Audio Card`, then test volume.
 5. Toggle the features you want under `Features`.
 
+If you enable `CEC Volume Buttons`, reboot once before judging whether SteamOS
+Quick Settings has switched from the normal slider to `+` / `-`. The CEC volume
+actions can work immediately while Steam/Game Mode still needs a fresh session
+to attach the PipeWire ExternalVolume route.
+
 If the plugin does not appear immediately, restart Steam or reboot.
 
 Development builds can be installed from `main` with:
