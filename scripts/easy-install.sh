@@ -47,6 +47,25 @@ ask_yes_no() {
   done
 }
 
+service_default() {
+  local scope="$1"
+  local unit="$2"
+  local fallback="$3"
+  local state
+
+  if [[ "$scope" == "user" ]]; then
+    state="$(systemctl --user is-enabled "$unit" 2>/dev/null || true)"
+  else
+    state="$(systemctl is-enabled "$unit" 2>/dev/null || true)"
+  fi
+
+  case "$state" in
+    enabled|static|generated|linked|linked-runtime) printf 'yes\n' ;;
+    disabled|masked) printf 'no\n' ;;
+    *) printf '%s\n' "$fallback" ;;
+  esac
+}
+
 require_command() {
   if ! command -v "$1" >/dev/null 2>&1; then
     printf 'Missing required command: %s\n' "$1" >&2
@@ -70,6 +89,7 @@ say "SteamOS CEC Toolkit installer"
 say "This installs the HDMI-CEC toolkit and the Decky plugin for Game Mode."
 say "You will be asked for sudo once or a few times while root-owned files are installed."
 say "The feature choices below can be changed later from the SteamOS CEC Decky plugin."
+say "If this is a reinstall, the defaults below use your current enabled/disabled feature state where it can be detected."
 
 if [[ ! -d "$HOME/homebrew" ]]; then
   say "Decky Loader was not found at $HOME/homebrew."
@@ -84,22 +104,29 @@ enable_gamescope_recovery=0
 enable_before_sleep=0
 enable_usb_wake=0
 
-if ask_yes_no "Enable Steam button/controller wake and input switching?" yes; then
+steam_button_default="$(service_default user steamos-cec-steam-button.service yes)"
+boot_wake_default="$(service_default user steamos-cec-boot-wake.service no)"
+tv_standby_default="$(service_default user steamos-cec-tv-standby-suspend.service no)"
+before_sleep_default="$(service_default system steamos-cec-before-sleep.service yes)"
+usb_wake_default="$(service_default system steamos-cec-usb-wake.service no)"
+gamescope_recovery_default="$(service_default user steamos-cec-gamescope-recovery.service no)"
+
+if ask_yes_no "Enable Steam button/controller wake and input switching?" "$steam_button_default"; then
   enable_steam_button=1
 fi
-if ask_yes_no "Enable wake and input switching when SteamOS starts?" no; then
+if ask_yes_no "Enable wake and input switching when SteamOS starts?" "$boot_wake_default"; then
   enable_boot_wake=1
 fi
-if ask_yes_no "Enable TV standby suspends SteamOS?" no; then
+if ask_yes_no "Enable TV standby suspends SteamOS?" "$tv_standby_default"; then
   enable_tv_standby=1
 fi
-if ask_yes_no "Enable SteamOS sleep/shutdown turns off TV?" yes; then
+if ask_yes_no "Enable SteamOS sleep/shutdown turns off TV?" "$before_sleep_default"; then
   enable_before_sleep=1
 fi
-if ask_yes_no "Enable Bluetooth/controller wake from suspend?" no; then
+if ask_yes_no "Enable Bluetooth/controller wake from suspend?" "$usb_wake_default"; then
   enable_usb_wake=1
 fi
-if ask_yes_no "Enable Gamescope recovery after CEC input activation?" no; then
+if ask_yes_no "Enable Gamescope recovery after CEC input activation?" "$gamescope_recovery_default"; then
   enable_gamescope_recovery=1
 fi
 
