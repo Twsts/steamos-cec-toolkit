@@ -62,11 +62,12 @@ The installer will:
 - download the latest release assets
 - ask which features you want to enable
 - install the CEC volume shim and root helpers
-- install the Decky plugin
+- optionally install the Decky plugin
 - discover CEC devices where possible
-- restart Decky Loader
+- restart Decky Loader if the plugin is installed
 
-After installation, open Game Mode and use the `SteamOS CEC` Decky plugin:
+If you install the Decky plugin, open Game Mode and use the `SteamOS CEC`
+plugin:
 
 1. Open `Configuration`.
 2. Press `Discover CEC Devices`.
@@ -83,6 +84,16 @@ to attach the PipeWire ExternalVolume route.
 
 If the plugin does not appear immediately, restart Steam or reboot.
 
+If you do not use Decky, the toolkit can still be managed from the command line:
+
+```bash
+~/.local/bin/steamos-cec-toolkitctl status
+~/.local/bin/steamos-cec-toolkitctl wake
+~/.local/bin/steamos-cec-toolkitctl volume up
+~/.local/bin/steamos-cec-toolkitctl volume down
+~/.local/bin/steamos-cec-toolkitctl standby
+```
+
 Development builds can be installed from `main` with:
 
 ```bash
@@ -92,11 +103,13 @@ bash <(curl -fsSL https://raw.githubusercontent.com/Twsts/steamos-cec-toolkit/ma
 ## Requirements
 
 - SteamOS / Steam Deck-style Game Mode on a DIY HTPC.
-- Decky Loader already installed.
+- Decky Loader if you want the Game Mode plugin UI. The toolkit itself can be
+  installed without Decky and managed from the command line.
 - A working CEC adapter exposed as `/dev/cec0` or similar.
 - A TV/AVR/soundbar HDMI-CEC chain.
-- `git`, `curl`, `sudo`, `systemctl`, and `unzip` available on the SteamOS
-  desktop session.
+- `git`, `curl`, `sudo`, and `systemctl` available on the SteamOS desktop
+  session.
+- `unzip` if you install the Decky plugin from release assets.
 
 ## Hardware This Targets
 

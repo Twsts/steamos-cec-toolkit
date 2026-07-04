@@ -83,18 +83,30 @@ require_command sudo
 require_command install
 require_command systemctl
 require_command tar
-require_command unzip
 
 say "SteamOS CEC Toolkit installer"
-say "This installs the HDMI-CEC toolkit and the Decky plugin for Game Mode."
+say "This installs the HDMI-CEC toolkit and can optionally install the Decky plugin for Game Mode."
 say "You will be asked for sudo once or a few times while root-owned files are installed."
-say "The feature choices below can be changed later from the SteamOS CEC Decky plugin."
+say "The feature choices below can be changed later from the SteamOS CEC Decky plugin if you install it."
 say "If this is a reinstall, the defaults below use your current enabled/disabled feature state where it can be detected."
 
-if [[ ! -d "$HOME/homebrew" ]]; then
+install_decky_default=no
+if [[ -d "$HOME/homebrew" ]]; then
+  install_decky_default=yes
+else
   say "Decky Loader was not found at $HOME/homebrew."
-  say "Install Decky Loader first, then rerun this installer."
-  exit 1
+  say "The toolkit can still be installed and managed from the command line."
+fi
+
+install_decky=0
+if ask_yes_no "Install the Decky plugin?" "$install_decky_default"; then
+  install_decky=1
+  if [[ ! -d "$HOME/homebrew" ]]; then
+    say "Decky Loader is required for the plugin but was not found at $HOME/homebrew."
+    say "Install Decky Loader first, then rerun this installer if you want the plugin."
+    exit 1
+  fi
+  require_command unzip
 fi
 
 enable_steam_button=0
@@ -173,23 +185,28 @@ fi
 step "Installing CEC toolkit"
 ./install.sh "${install_args[@]}"
 
-step "Installing Decky plugin"
-sudo install -d -m 0755 "$PLUGIN_DIR"
-sudo rm -rf "$PLUGIN_DIR/$PLUGIN_NAME"
+if [[ "$install_decky" -eq 1 ]]; then
+  step "Installing Decky plugin"
+  sudo install -d -m 0755 "$PLUGIN_DIR"
+  sudo rm -rf "$PLUGIN_DIR/$PLUGIN_NAME"
 
-if [[ -n "$DECKY_PLUGIN_ZIP_URL" ]]; then
-  curl -fL "$DECKY_PLUGIN_ZIP_URL" -o "$WORKDIR/steamos-cec-toolkit-decky.zip"
-  sudo unzip -o "$WORKDIR/steamos-cec-toolkit-decky.zip" -d "$PLUGIN_DIR"
+  if [[ -n "$DECKY_PLUGIN_ZIP_URL" ]]; then
+    curl -fL "$DECKY_PLUGIN_ZIP_URL" -o "$WORKDIR/steamos-cec-toolkit-decky.zip"
+    sudo unzip -o "$WORKDIR/steamos-cec-toolkit-decky.zip" -d "$PLUGIN_DIR"
+  else
+    sudo install -d -m 0755 "$PLUGIN_DIR/$PLUGIN_NAME"
+    sudo cp -a decky/plugin.json decky/package.json decky/main.py decky/dist "$PLUGIN_DIR/$PLUGIN_NAME/"
+  fi
+
+  sudo chown -R root:root "$PLUGIN_DIR/$PLUGIN_NAME"
+  sudo chmod -R a+rX "$PLUGIN_DIR/$PLUGIN_NAME"
+
+  if systemctl list-unit-files plugin_loader.service >/dev/null 2>&1; then
+    sudo systemctl restart plugin_loader.service
+  fi
 else
-  sudo install -d -m 0755 "$PLUGIN_DIR/$PLUGIN_NAME"
-  sudo cp -a decky/plugin.json decky/package.json decky/main.py decky/dist "$PLUGIN_DIR/$PLUGIN_NAME/"
-fi
-
-sudo chown -R root:root "$PLUGIN_DIR/$PLUGIN_NAME"
-sudo chmod -R a+rX "$PLUGIN_DIR/$PLUGIN_NAME"
-
-if systemctl list-unit-files plugin_loader.service >/dev/null 2>&1; then
-  sudo systemctl restart plugin_loader.service
+  step "Skipping Decky plugin"
+  say "You can manage the toolkit with ~/.local/bin/steamos-cec-toolkitctl and rerun this installer later to add the plugin."
 fi
 
 step "Checking CEC setup"
@@ -280,7 +297,7 @@ fi
 
 step "Done"
 cat <<'DONE'
-Open Game Mode and check the Decky plugin named "SteamOS CEC".
+If you installed the Decky plugin, open Game Mode and check the plugin named "SteamOS CEC".
 
 Recommended first steps in the plugin:
   1. Open Configuration and run Discover CEC Devices.
@@ -289,5 +306,10 @@ Recommended first steps in the plugin:
   4. Toggle features on or off under Features.
   5. If you enabled CEC Volume Buttons, reboot once before judging whether Quick Settings has switched from the slider to + / -.
 
-If Game Mode does not show the plugin immediately, restart Steam or reboot.
+Command-line checks:
+  ~/.local/bin/steamos-cec-toolkitctl status
+  ~/.local/bin/steamos-cec-toolkitctl wake
+  ~/.local/bin/steamos-cec-toolkitctl volume up
+
+If Game Mode does not show the plugin immediately after plugin install, restart Steam or reboot.
 DONE
