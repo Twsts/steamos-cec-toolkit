@@ -380,13 +380,17 @@ Important defaults:
 
 ```bash
 CEC_DEVICE=/dev/cec0
-STEAMOS_CEC_USER=deck
+STEAMOS_CEC_USER=<install-user>
 CEC_VOLUME_INITIATOR=0
 CEC_AUDIO_LOGICAL_ADDRESS=5
 HDMI_ALSA_CARD_NAME=alsa_card.pci-0000_03_00.1
 HDMI_ALSA_CARD_NICK="HDA ATI HDMI"
 EXTERNAL_VOLUME_ROUTE=hdmi-output-0
 ```
+
+On official SteamOS images the install user is normally `deck`. On other
+self-installed SteamOS-style systems, the installer writes the user that ran the
+installer.
 
 Find CEC topology:
 

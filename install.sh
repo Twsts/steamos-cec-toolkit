@@ -3,6 +3,7 @@ set -euo pipefail
 
 PROJECT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 CONFIG_FILE="${STEAMOS_CEC_CONFIG:-/etc/steamos-cec-toolkit.conf}"
+INSTALL_USER="$(id -un)"
 
 enable_external_volume=1
 enable_steam_button=0
@@ -74,6 +75,7 @@ fi
 if [[ ! -f "$CONFIG_FILE" ]]; then
   echo "Installing default config at $CONFIG_FILE"
   sudo install -D -m 0644 "$PROJECT_DIR/config/steamos-cec-toolkit.conf.example" "$CONFIG_FILE"
+  sudo sed -i "s|^STEAMOS_CEC_USER=.*|STEAMOS_CEC_USER=$INSTALL_USER|" "$CONFIG_FILE"
   mapfile -t detected_cec_devices < <(compgen -G "/dev/cec*" | sort)
   if [[ "${#detected_cec_devices[@]}" -eq 1 && "${detected_cec_devices[0]}" != "/dev/cec0" ]]; then
     echo "Using detected CEC adapter ${detected_cec_devices[0]} in $CONFIG_FILE"
@@ -84,6 +86,11 @@ if [[ ! -f "$CONFIG_FILE" ]]; then
   fi
 else
   echo "Keeping existing config at $CONFIG_FILE"
+fi
+
+if grep -qx 'STEAMOS_CEC_USER=deck' "$CONFIG_FILE" 2>/dev/null && ! getent passwd deck >/dev/null; then
+  echo "Repairing STEAMOS_CEC_USER in $CONFIG_FILE to $INSTALL_USER"
+  sudo sed -i "s|^STEAMOS_CEC_USER=deck$|STEAMOS_CEC_USER=$INSTALL_USER|" "$CONFIG_FILE"
 fi
 
 if grep -qx 'HDMI_ALSA_CARD_NICK=HDA ATI HDMI' "$CONFIG_FILE" 2>/dev/null; then
