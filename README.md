@@ -321,7 +321,7 @@ gh release create v0.1.0 \
 
 ## Decky Plugin
 
-This repository also includes an early Decky plugin under:
+This repository includes an optional Decky plugin under:
 
 ```text
 decky/
