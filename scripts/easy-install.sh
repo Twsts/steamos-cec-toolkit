@@ -103,10 +103,17 @@ if ask_yes_no "Install the Decky plugin?" "$install_decky_default"; then
   install_decky=1
   if [[ ! -d "$HOME/homebrew" ]]; then
     say "Decky Loader is required for the plugin but was not found at $HOME/homebrew."
-    say "Install Decky Loader first, then rerun this installer if you want the plugin."
-    exit 1
+    say "You can still install the toolkit now and add the Decky plugin later."
+    if ask_yes_no "Continue without the Decky plugin?" yes; then
+      install_decky=0
+    else
+      say "Install Decky Loader first, then rerun this installer if you want the plugin."
+      exit 1
+    fi
   fi
-  require_command unzip
+  if [[ "$install_decky" -eq 1 ]]; then
+    require_command unzip
+  fi
 fi
 
 enable_steam_button=0
