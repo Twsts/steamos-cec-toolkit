@@ -673,20 +673,20 @@ it can restart `gamescope-session.target` after a short delay. This is useful on
 some HTPC setups where switching back to the SteamOS input leaves Game Mode in a
 bad display state.
 
-When enabled, recovery is also cooldown-protected after system resume. A
-controller/Steam-button CEC activation can request recovery only when CEC already
-reported this source as active and the configured DRM connector was not
-`connected` before activation. This handles cases where SteamOS wakes from a
-Bluetooth/controller event, CEC already thinks the SteamOS source is active, but
-the TV still shows no video or Game Mode stays in a bad display state.
+When enabled, recovery is also cooldown-protected after system resume and after
+the configured DRM connector reconnects while CEC reports this source as active.
+This handles cases where SteamOS wakes from a Bluetooth/controller event, CEC
+already thinks the SteamOS source is active, but the TV still shows no video or
+Game Mode stays in a bad display state. Controller button presses only send CEC
+wake/input commands; they do not directly restart Gamescope.
 
 Configure the connector status path in:
 
 ```bash
 GAMESCOPE_CONNECTOR_STATUS=/sys/class/drm/card0-DP-1/status
 GAMESCOPE_RECOVER_AFTER_RESUME=1
-GAMESCOPE_RECOVER_AFTER_CEC_ACTIVATION=1
 GAMESCOPE_RECOVERY_COOLDOWN_SECONDS=30
+GAMESCOPE_CONNECTOR_POLL_SECONDS=1
 ```
 
 ## Logs

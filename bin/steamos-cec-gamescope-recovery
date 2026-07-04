@@ -25,6 +25,7 @@ DEFAULT_CONFIG = "/etc/steamos-cec-toolkit.conf"
 RECOVERY_DELAY_SECONDS = 3
 RESUME_RECOVERY_DELAY_SECONDS = 3
 RECOVERY_COOLDOWN_SECONDS = 30
+CONNECTOR_POLL_SECONDS = 1.0
 RUNTIME_DIR = Path(os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}"))
 COOLDOWN_FILE = RUNTIME_DIR / "steamos-cec-gamescope-recovery.last"
 
@@ -63,6 +64,9 @@ RESUME_RECOVERY_DELAY_SECONDS = float(
 )
 RECOVERY_COOLDOWN_SECONDS = float(
     CONFIG.get("GAMESCOPE_RECOVERY_COOLDOWN_SECONDS", str(RECOVERY_COOLDOWN_SECONDS))
+)
+CONNECTOR_POLL_SECONDS = float(
+    CONFIG.get("GAMESCOPE_CONNECTOR_POLL_SECONDS", str(CONNECTOR_POLL_SECONDS))
 )
 
 
@@ -137,13 +141,11 @@ def schedule_recovery(state: dict[str, object], reason: str) -> None:
     state["task"] = asyncio.create_task(recover_gamescope(reason, delay))
 
 
-async def request_recovery(reason: str, delay: float) -> None:
-    remaining = cooldown_remaining()
-    if remaining > 0:
-        LOG.info("Recovery request suppressed by cooldown for %.1fs (%s)", remaining, reason)
-        return
-    mark_recovery_requested()
-    await recover_gamescope(reason, delay)
+def connector_status() -> str:
+    try:
+        return CONNECTOR_STATUS.read_text().strip()
+    except OSError:
+        return "unknown"
 
 
 async def monitor_cec(state: dict[str, object]) -> None:
@@ -174,6 +176,26 @@ async def monitor_cec(state: dict[str, object]) -> None:
     await asyncio.get_running_loop().create_future()
 
 
+async def monitor_connector(state: dict[str, object]) -> None:
+    previous = connector_status()
+    state["connector_status"] = previous
+    LOG.info("Monitoring DRM connector %s; initial state=%s", CONNECTOR_STATUS, previous)
+
+    while True:
+        await asyncio.sleep(CONNECTOR_POLL_SECONDS)
+        current = connector_status()
+        if current == previous:
+            continue
+
+        LOG.info("DRM connector changed: %s -> %s", previous, current)
+        state["connector_status"] = current
+
+        if previous != "connected" and current == "connected" and state.get("active"):
+            schedule_recovery(state, "display reconnected while CEC source active")
+
+        previous = current
+
+
 async def monitor_sleep(state: dict[str, object]) -> None:
     if not RECOVER_AFTER_RESUME:
         LOG.info("Resume recovery disabled by config")
@@ -202,21 +224,17 @@ async def monitor_sleep(state: dict[str, object]) -> None:
 async def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--recover-now", action="store_true")
-    parser.add_argument("--request-recovery", metavar="REASON")
-    parser.add_argument("--delay", type=float, default=RECOVERY_DELAY_SECONDS)
     args = parser.parse_args()
 
     if args.recover_now:
         await recover_gamescope("manual", 0)
-    elif args.request_recovery:
-        await request_recovery(args.request_recovery, args.delay)
     else:
         state: dict[str, object] = {
             "active": False,
             "last_recovery": 0.0,
             "task": None,
         }
-        await asyncio.gather(monitor_cec(state), monitor_sleep(state))
+        await asyncio.gather(monitor_cec(state), monitor_connector(state), monitor_sleep(state))
 
 
 if __name__ == "__main__":

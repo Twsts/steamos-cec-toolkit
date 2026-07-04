@@ -138,17 +138,6 @@ TV_LOGICAL_ADDRESS = CONFIG.get("TV_LOGICAL_ADDRESS", "0")
 CEC_PLAYBACK_LOGICAL_ADDRESS = CONFIG.get("CEC_PLAYBACK_LOGICAL_ADDRESS", "4")
 CEC_PHYSICAL_ADDRESS = CONFIG.get("CEC_PHYSICAL_ADDRESS", "")
 RESUME_CEC_DELAY_SECONDS = float(CONFIG.get("CONTROLLER_WAKE_RESUME_DELAY_SECONDS", "2"))
-GAMESCOPE_CONNECTOR_STATUS = CONFIG.get(
-    "GAMESCOPE_CONNECTOR_STATUS", "/sys/class/drm/card0-DP-1/status"
-)
-RECOVER_GAMESCOPE_AFTER_CEC_ACTIVATION = CONFIG.get(
-    "GAMESCOPE_RECOVER_AFTER_CEC_ACTIVATION", "1"
-) not in {"0", "false", "False", "no"}
-GAMESCOPE_RECOVERY_DELAY_SECONDS = float(CONFIG.get("GAMESCOPE_RECOVERY_DELAY_SECONDS", "3"))
-GAMESCOPE_RECOVERY_SCRIPT = CONFIG.get(
-    "GAMESCOPE_RECOVERY_SCRIPT",
-    f"/home/{STEAMOS_CEC_USER}/.local/bin/steamos-cec-gamescope-recovery",
-)
 
 ACTIVATION_LOCK = threading.Lock()
 
@@ -377,46 +366,11 @@ def source_is_active() -> bool:
     return result.returncode == 0 and result.stdout.strip() == "b true"
 
 
-def connector_status() -> str:
-    try:
-        with open(GAMESCOPE_CONNECTOR_STATUS, encoding="utf-8") as status:
-            return status.read().strip()
-    except OSError:
-        return "unknown"
-
-
-def request_gamescope_recovery(reason: str) -> None:
-    if not RECOVER_GAMESCOPE_AFTER_CEC_ACTIVATION:
-        return
-    if not os.path.exists(GAMESCOPE_RECOVERY_SCRIPT):
-        LOG.debug("Gamescope recovery script is missing; skipping recovery request")
-        return
-
-    try:
-        subprocess.Popen(
-            [
-                GAMESCOPE_RECOVERY_SCRIPT,
-                "--request-recovery",
-                f"CEC activation: {reason}",
-                "--delay",
-                str(GAMESCOPE_RECOVERY_DELAY_SECONDS),
-            ],
-            start_new_session=True,
-        )
-    except OSError as error:
-        LOG.warning("Cannot request Gamescope recovery: %s", error)
-
-
 def activate_source(reason: str) -> None:
     with ACTIVATION_LOCK:
         was_active = source_is_active()
-        display_status_before = connector_status()
         if was_active:
-            LOG.info(
-                "CEC source reports active; still sending raw wake/input activation (%s, display=%s)",
-                reason,
-                display_status_before,
-            )
+            LOG.info("CEC source reports active; still sending raw wake/input activation (%s)", reason)
 
         for attempt, delay in enumerate(CEC_WAKE_RETRY_DELAYS, start=1):
             if delay:
@@ -435,8 +389,6 @@ def activate_source(reason: str) -> None:
             time.sleep(0.5)
             if source_is_active():
                 LOG.info("Woke display chain and activated HDMI source (%s, attempt %d)", reason, attempt)
-                if was_active and display_status_before != "connected":
-                    request_gamescope_recovery(reason)
                 return
             LOG.info("CEC wake attempt %d did not activate this source", attempt)
 
