@@ -6,9 +6,9 @@
 > with a UGREEN DisplayPort-to-HDMI CEC adapter exposing `/dev/cec0`.
 
 SteamOS CEC Toolkit adds living-room HDMI-CEC behavior to DIY SteamOS /
-Steam Machine / HTPC builds. It installs scripts, systemd units, WirePlumber
-overrides, and a Decky plugin so Game Mode can control the TV/AVR chain like a
-console.
+Steam Machine / HTPC builds. It installs scripts, systemd units, and
+WirePlumber overrides so Game Mode can control the TV/AVR chain like a console.
+An optional Decky plugin provides a Game Mode control panel.
 
 It was built for a living-room SteamOS box where:
 
@@ -30,8 +30,9 @@ It was built for a living-room SteamOS box where:
 - The original Steam Controller has a HID fallback profile for wake/input
   switching if Linux does not expose a normal gamepad Home button event.
 
-Features are configurable and can be toggled on or off from the Decky plugin
-after the toolkit has been installed.
+Features are configurable from the Decky plugin or from the
+`steamos-cec-toolkitctl` command-line helper after the toolkit has been
+installed.
 
 The project uses Valve's existing SteamOS CEC daemon (`cecd`) and PipeWire
 ExternalVolume plumbing.
@@ -185,19 +186,20 @@ user so the user-level `cecd` service can reattach the adapter.
 ## SteamOS Updates and Recovery
 
 SteamOS updates can replace or reset parts of the system image. User files in
-`/home/deck` usually survive, but anything under `/etc`, `/var/lib`, systemd
-unit state, WirePlumber behavior, Decky Loader, or SteamOS CEC internals may
-change after an OS update.
+the SteamOS desktop user's home directory usually survive, but anything under
+`/etc`, `/var/lib`, systemd unit state, WirePlumber behavior, Decky Loader, or
+SteamOS CEC internals may change after an OS update.
 
 Common symptoms after an update:
 
 - Game Mode goes back to the normal volume slider.
-- The `SteamOS CEC` Decky plugin shows `Missing` for a helper or sudoers rule.
-- Feature toggles are present but do not do anything.
+- The `SteamOS CEC` Decky plugin shows `Missing` for a helper or sudoers rule,
+  if you installed the plugin.
+- Feature toggles are present but do not do anything, if you use the plugin.
 - CEC discovery works, but volume or TV standby actions fail.
-- Decky Loader itself needs to be reinstalled or restarted.
+- Decky Loader itself needs to be reinstalled or restarted, if you use Decky.
 
-The Decky plugin is the first place to check:
+If you use Decky, the plugin is the first place to check:
 
 - `Root helper`, `Debug helper`, `Power standby helper`, and `Sudoers` should be
   `OK`.
@@ -215,15 +217,22 @@ bash <(curl -fsSL https://github.com/Twsts/steamos-cec-toolkit/releases/latest/d
 ```
 
 This refreshes the root helpers, sudoers rule, systemd units, WirePlumber
-override, CEC device permission repair, and Decky plugin. It keeps your runtime
-choices in:
+override, CEC device permission repair, and optionally the Decky plugin. It
+keeps your runtime choices in:
 
 ```text
 ~/.config/steamos-cec-toolkit/config.conf
 ```
 
-After rerunning the installer, open the plugin, run `Discover CEC Devices`, and
-toggle your preferred features back on if needed.
+After rerunning the installer, Decky users can open the plugin, run
+`Discover CEC Devices`, and toggle preferred features back on if needed. Without
+Decky, use:
+
+```bash
+~/.local/bin/steamos-cec-toolkitctl status
+~/.local/bin/steamos-cec-toolkitctl discover-cec
+~/.local/bin/steamos-cec-toolkitctl discover-audio
+```
 
 ## Why Relative Volume Needs a Shim
 
@@ -263,7 +272,7 @@ Most users should use the one-command installer above.
 
 Manual install:
 
-Clone the repo on the SteamOS machine as the `deck` user:
+Clone the repo on the SteamOS machine as the normal SteamOS desktop user:
 
 ```bash
 git clone https://github.com/Twsts/steamos-cec-toolkit.git
@@ -344,7 +353,8 @@ can:
 
 The plugin intentionally does not create sudoers rules or write root-owned
 system files. Install the toolkit from Desktop/SSH first, then use the plugin
-for day-to-day control. Runtime choices made in the plugin are written to:
+for day-to-day control if desired. Runtime choices made in the plugin are
+written to:
 
 ```text
 ~/.config/steamos-cec-toolkit/config.conf
@@ -369,8 +379,8 @@ The installer creates:
 /etc/steamos-cec-toolkit.conf
 ```
 
-The Decky plugin can write user-level overrides for common runtime choices. For
-system defaults, edit:
+The Decky plugin and `steamos-cec-toolkitctl` can write user-level overrides for
+common runtime choices. For system defaults, edit:
 
 ```bash
 sudoedit /etc/steamos-cec-toolkit.conf
@@ -446,9 +456,9 @@ If the receiver volume moves, the shim is working.
 
 ## CEC Debug Capture
 
-The Decky plugin has a Debug panel that can capture a short window of live CEC
-messages. This uses a narrow root helper because `cec-ctl --monitor-all`
-normally requires root on SteamOS.
+The optional Decky plugin has a Debug panel that can capture a short window of
+live CEC messages. This uses a narrow root helper because `cec-ctl
+--monitor-all` normally requires root on SteamOS.
 
 From SSH/Desktop you can run the same capture manually:
 
@@ -522,13 +532,24 @@ command with retries. This is intended for console-style cold boot behavior:
 power on the SteamOS machine, then let it wake the TV/AVR and select the
 SteamOS input automatically.
 
-The Steam Controller HID fallback uses this default report parsing:
+The Steam Controller HID fallback supports both older and newer Steam
+Controller / Steam Controller Puck firmware report formats. The older report
+uses this default parsing:
 
 ```bash
 STEAM_BUTTON_HID_ID=0003:000028DE:00001304
 STEAM_BUTTON_REPORT_ID=0x45
 STEAM_BUTTON_BYTE=4
 STEAM_BUTTON_MASK=0x01
+```
+
+The newer report path uses:
+
+```bash
+STEAM_BUTTON_ALT_REPORT_ID=0x44
+STEAM_BUTTON_ALT_BYTE=1
+STEAM_BUTTON_ALT_VALUES="0x03,0x04"
+STEAM_BUTTON_ALT_DEBOUNCE_SECONDS=20
 ```
 
 Other controllers use the generic gamepad Home/Guide input-event path when
@@ -570,8 +591,12 @@ Enable with:
 ```
 
 This installs a system service and a `systemd/system-sleep` hook that ask
-`cecd` to send TV standby before SteamOS sleeps or shuts down. The Decky plugin
-can toggle it after the root helper and system unit have been installed.
+`cecd` to send TV standby before SteamOS sleeps or shuts down. It can be toggled
+from the Decky plugin or with:
+
+```bash
+~/.local/bin/steamos-cec-toolkitctl set-system-service power-standby on
+```
 
 ## Optional Gamescope Recovery
 
