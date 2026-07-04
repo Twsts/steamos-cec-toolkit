@@ -42,11 +42,11 @@ ExternalVolume plumbing.
 <table>
   <tr>
     <td><img src="assets/screenshots/steamui-relative-volume-v012.png" alt="SteamOS Quick Settings showing relative TV volume plus and minus buttons" /></td>
-    <td><img src="assets/screenshots/decky-status-features-v016.png" alt="SteamOS CEC Decky plugin status and feature toggles" /></td>
+    <td><img src="assets/screenshots/decky-status-features-v014.png" alt="SteamOS CEC Decky plugin status and feature toggles" /></td>
   </tr>
   <tr>
-    <td><img src="assets/screenshots/decky-actions-configuration-v016.png" alt="SteamOS CEC Decky plugin actions and controller configuration" /></td>
-    <td><img src="assets/screenshots/decky-configuration-debug-v016.png" alt="SteamOS CEC Decky plugin CEC configuration and debug status" /></td>
+    <td><img src="assets/screenshots/decky-actions-configuration-v014.png" alt="SteamOS CEC Decky plugin actions and controller configuration" /></td>
+    <td><img src="assets/screenshots/decky-configuration-debug-v014.png" alt="SteamOS CEC Decky plugin CEC configuration and debug status" /></td>
   </tr>
 </table>
 
