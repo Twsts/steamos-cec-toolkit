@@ -25,6 +25,8 @@ DEFAULT_CONFIG = "/etc/steamos-cec-toolkit.conf"
 RECOVERY_DELAY_SECONDS = 3
 RESUME_RECOVERY_DELAY_SECONDS = 3
 RECOVERY_COOLDOWN_SECONDS = 30
+RUNTIME_DIR = Path(os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}"))
+COOLDOWN_FILE = RUNTIME_DIR / "steamos-cec-gamescope-recovery.last"
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 LOG = logging.getLogger("steamos-cec-gamescope-recovery")
@@ -59,6 +61,25 @@ RECOVERY_DELAY_SECONDS = float(CONFIG.get("GAMESCOPE_RECOVERY_DELAY_SECONDS", st
 RESUME_RECOVERY_DELAY_SECONDS = float(
     CONFIG.get("GAMESCOPE_RESUME_RECOVERY_DELAY_SECONDS", str(RESUME_RECOVERY_DELAY_SECONDS))
 )
+RECOVERY_COOLDOWN_SECONDS = float(
+    CONFIG.get("GAMESCOPE_RECOVERY_COOLDOWN_SECONDS", str(RECOVERY_COOLDOWN_SECONDS))
+)
+
+
+def cooldown_remaining() -> float:
+    try:
+        last_recovery = float(COOLDOWN_FILE.read_text().strip())
+    except (OSError, ValueError):
+        return 0.0
+    remaining = RECOVERY_COOLDOWN_SECONDS - (time.monotonic() - last_recovery)
+    return max(0.0, remaining)
+
+
+def mark_recovery_requested() -> None:
+    try:
+        COOLDOWN_FILE.write_text(f"{time.monotonic()}\n")
+    except OSError as error:
+        LOG.warning("Cannot write recovery cooldown state: %s", error)
 
 
 async def command(*args: str) -> tuple[int, str]:
@@ -99,7 +120,8 @@ async def recover_gamescope(reason: str, delay: float) -> None:
 def schedule_recovery(state: dict[str, object], reason: str) -> None:
     now = time.monotonic()
     last_recovery = float(state.get("last_recovery", 0.0))
-    if now - last_recovery < RECOVERY_COOLDOWN_SECONDS:
+    remaining = cooldown_remaining()
+    if remaining > 0 or now - last_recovery < RECOVERY_COOLDOWN_SECONDS:
         LOG.info("Recovery suppressed by cooldown (%s)", reason)
         return
 
@@ -110,8 +132,18 @@ def schedule_recovery(state: dict[str, object], reason: str) -> None:
 
     LOG.info("Scheduling Gamescope recovery (%s)", reason)
     state["last_recovery"] = now
+    mark_recovery_requested()
     delay = RESUME_RECOVERY_DELAY_SECONDS if reason == "system resumed" else RECOVERY_DELAY_SECONDS
     state["task"] = asyncio.create_task(recover_gamescope(reason, delay))
+
+
+async def request_recovery(reason: str, delay: float) -> None:
+    remaining = cooldown_remaining()
+    if remaining > 0:
+        LOG.info("Recovery request suppressed by cooldown for %.1fs (%s)", remaining, reason)
+        return
+    mark_recovery_requested()
+    await recover_gamescope(reason, delay)
 
 
 async def monitor_cec(state: dict[str, object]) -> None:
@@ -170,10 +202,14 @@ async def monitor_sleep(state: dict[str, object]) -> None:
 async def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--recover-now", action="store_true")
+    parser.add_argument("--request-recovery", metavar="REASON")
+    parser.add_argument("--delay", type=float, default=RECOVERY_DELAY_SECONDS)
     args = parser.parse_args()
 
     if args.recover_now:
         await recover_gamescope("manual", 0)
+    elif args.request_recovery:
+        await request_recovery(args.request_recovery, args.delay)
     else:
         state: dict[str, object] = {
             "active": False,
