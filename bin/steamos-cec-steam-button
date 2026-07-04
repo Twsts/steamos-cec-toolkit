@@ -4,13 +4,22 @@
 from __future__ import annotations
 
 import glob
+import asyncio
 import logging
 import os
 import selectors
 import struct
 import subprocess
+import threading
 import time
 from dataclasses import dataclass
+
+try:
+    from dbus_next import BusType
+    from dbus_next.aio import MessageBus
+except ImportError:
+    BusType = None
+    MessageBus = None
 
 
 CEC_BUS = "com.steampowered.CecDaemon1"
@@ -18,6 +27,9 @@ CEC_PATH = "/com/steampowered/CecDaemon1/Daemon"
 CEC_INTERFACE = "com.steampowered.CecDaemon1.Daemon1"
 CEC_DEVICE_PATH = "/com/steampowered/CecDaemon1/Devices/Cec0"
 CEC_DEVICE_INTERFACE = "com.steampowered.CecDaemon1.CecDevice1"
+LOGIN1_BUS_NAME = "org.freedesktop.login1"
+LOGIN1_PATH = "/org/freedesktop/login1"
+LOGIN1_INTERFACE = "org.freedesktop.login1.Manager"
 DEFAULT_CONFIG = "/etc/steamos-cec-toolkit.conf"
 
 BUTTON_DEBOUNCE_SECONDS = 2
@@ -125,6 +137,9 @@ CEC_DEVICE = CONFIG.get("CEC_DEVICE", "/dev/cec0")
 TV_LOGICAL_ADDRESS = CONFIG.get("TV_LOGICAL_ADDRESS", "0")
 CEC_PLAYBACK_LOGICAL_ADDRESS = CONFIG.get("CEC_PLAYBACK_LOGICAL_ADDRESS", "4")
 CEC_PHYSICAL_ADDRESS = CONFIG.get("CEC_PHYSICAL_ADDRESS", "")
+RESUME_CEC_DELAY_SECONDS = float(CONFIG.get("CONTROLLER_WAKE_RESUME_DELAY_SECONDS", "2"))
+
+ACTIVATION_LOCK = threading.Lock()
 
 
 def hid_properties(path: str) -> dict[str, str]:
@@ -352,34 +367,73 @@ def source_is_active() -> bool:
 
 
 def activate_source(reason: str) -> None:
-    if source_is_active():
-        LOG.info("CEC source reports active; still sending raw wake/input activation (%s)", reason)
-
-    for attempt, delay in enumerate(CEC_WAKE_RETRY_DELAYS, start=1):
-        if delay:
-            time.sleep(delay)
-        raw_wake()
-        result = cec_wake()
-        if result.returncode != 0:
-            LOG.warning(
-                "CEC activation attempt %d failed: %s",
-                attempt,
-                result.stdout.strip(),
-            )
-            continue
-        time.sleep(1.0)
-        raw_active_source()
-        time.sleep(0.5)
+    with ACTIVATION_LOCK:
         if source_is_active():
-            LOG.info("Woke display chain and activated HDMI source (%s, attempt %d)", reason, attempt)
+            LOG.info("CEC source reports active; still sending raw wake/input activation (%s)", reason)
+
+        for attempt, delay in enumerate(CEC_WAKE_RETRY_DELAYS, start=1):
+            if delay:
+                time.sleep(delay)
+            raw_wake()
+            result = cec_wake()
+            if result.returncode != 0:
+                LOG.warning(
+                    "CEC activation attempt %d failed: %s",
+                    attempt,
+                    result.stdout.strip(),
+                )
+                continue
+            time.sleep(1.0)
+            raw_active_source()
+            time.sleep(0.5)
+            if source_is_active():
+                LOG.info("Woke display chain and activated HDMI source (%s, attempt %d)", reason, attempt)
+                return
+            LOG.info("CEC wake attempt %d did not activate this source", attempt)
+
+        for delay in (2, 5, 8):
+            time.sleep(delay)
+            raw_active_source()
+
+        LOG.warning("Display wake/source activation did not complete after CEC retries")
+
+
+async def monitor_login1_resume() -> None:
+    if BusType is None or MessageBus is None:
+        LOG.warning("dbus_next is missing; system resume CEC activation is disabled")
+        return
+
+    try:
+        bus = await MessageBus(bus_type=BusType.SYSTEM).connect()
+        introspection = await bus.introspect(LOGIN1_BUS_NAME, LOGIN1_PATH)
+        proxy = bus.get_proxy_object(LOGIN1_BUS_NAME, LOGIN1_PATH, introspection)
+        manager = proxy.get_interface(LOGIN1_INTERFACE)
+    except Exception as error:
+        LOG.warning("Cannot monitor system resume: %s", error)
+        return
+
+    async def activate_after_resume_delay() -> None:
+        await asyncio.sleep(RESUME_CEC_DELAY_SECONDS)
+        await asyncio.to_thread(activate_source, "system resumed")
+
+    def prepare_for_sleep(sleeping):
+        LOG.info("PrepareForSleep sleeping=%s", sleeping)
+        if sleeping:
             return
-        LOG.info("CEC wake attempt %d did not activate this source", attempt)
+        asyncio.get_running_loop().create_task(activate_after_resume_delay())
 
-    for delay in (2, 5, 8):
-        time.sleep(delay)
-        raw_active_source()
+    manager.on_prepare_for_sleep(prepare_for_sleep)
+    LOG.info("Monitoring system resume for CEC wake/input activation")
+    await asyncio.get_running_loop().create_future()
 
-    LOG.warning("Display wake/source activation did not complete after CEC retries")
+
+def start_resume_monitor() -> None:
+    thread = threading.Thread(
+        target=lambda: asyncio.run(monitor_login1_resume()),
+        name="login1-resume-monitor",
+        daemon=True,
+    )
+    thread.start()
 
 
 def refresh_devices(
@@ -455,6 +509,8 @@ def update_system_resume_window(
 
 
 def main() -> None:
+    start_resume_monitor()
+
     selector = selectors.DefaultSelector()
     open_devices: dict[str, int] = {}
     device_kinds: dict[str, str] = {}

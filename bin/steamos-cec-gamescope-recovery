@@ -23,6 +23,7 @@ LOGIN1_PATH = "/org/freedesktop/login1"
 LOGIN1_INTERFACE = "org.freedesktop.login1.Manager"
 DEFAULT_CONFIG = "/etc/steamos-cec-toolkit.conf"
 RECOVERY_DELAY_SECONDS = 3
+RESUME_RECOVERY_DELAY_SECONDS = 3
 RECOVERY_COOLDOWN_SECONDS = 30
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -54,6 +55,10 @@ RECOVER_AFTER_RESUME = CONFIG.get("GAMESCOPE_RECOVER_AFTER_RESUME", "1") not in 
     "False",
     "no",
 }
+RECOVERY_DELAY_SECONDS = float(CONFIG.get("GAMESCOPE_RECOVERY_DELAY_SECONDS", str(RECOVERY_DELAY_SECONDS)))
+RESUME_RECOVERY_DELAY_SECONDS = float(
+    CONFIG.get("GAMESCOPE_RESUME_RECOVERY_DELAY_SECONDS", str(RESUME_RECOVERY_DELAY_SECONDS))
+)
 
 
 async def command(*args: str) -> tuple[int, str]:
@@ -66,8 +71,8 @@ async def command(*args: str) -> tuple[int, str]:
     return process.returncode, stdout.decode(errors="replace").strip()
 
 
-async def recover_gamescope(reason: str) -> None:
-    await asyncio.sleep(RECOVERY_DELAY_SECONDS)
+async def recover_gamescope(reason: str, delay: float) -> None:
+    await asyncio.sleep(delay)
 
     if CONNECTOR_STATUS.exists() and CONNECTOR_STATUS.read_text().strip() != "connected":
         LOG.warning("%s is not connected; skipping Gamescope recovery", CONNECTOR_STATUS)
@@ -105,7 +110,8 @@ def schedule_recovery(state: dict[str, object], reason: str) -> None:
 
     LOG.info("Scheduling Gamescope recovery (%s)", reason)
     state["last_recovery"] = now
-    state["task"] = asyncio.create_task(recover_gamescope(reason))
+    delay = RESUME_RECOVERY_DELAY_SECONDS if reason == "system resumed" else RECOVERY_DELAY_SECONDS
+    state["task"] = asyncio.create_task(recover_gamescope(reason, delay))
 
 
 async def monitor_cec(state: dict[str, object]) -> None:
@@ -167,7 +173,7 @@ async def main() -> None:
     args = parser.parse_args()
 
     if args.recover_now:
-        await recover_gamescope("manual")
+        await recover_gamescope("manual", 0)
     else:
         state: dict[str, object] = {
             "active": False,
