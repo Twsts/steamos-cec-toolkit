@@ -95,68 +95,6 @@ If you do not use Decky, the toolkit can still be managed from the command line:
 ~/.local/bin/steamos-cec-toolkitctl standby
 ```
 
-## Command-Line Control
-
-`steamos-cec-toolkitctl` is the CLI equivalent of the Decky control panel. It
-prints JSON so it can be used from SSH, scripts, or bug reports.
-
-Discovery and status:
-
-```bash
-~/.local/bin/steamos-cec-toolkitctl status
-~/.local/bin/steamos-cec-toolkitctl discover-cec
-~/.local/bin/steamos-cec-toolkitctl discover-audio
-~/.local/bin/steamos-cec-toolkitctl discover-input
-```
-
-Direct actions:
-
-```bash
-~/.local/bin/steamos-cec-toolkitctl wake
-~/.local/bin/steamos-cec-toolkitctl standby
-~/.local/bin/steamos-cec-toolkitctl volume up
-~/.local/bin/steamos-cec-toolkitctl volume down
-~/.local/bin/steamos-cec-toolkitctl volume mute
-~/.local/bin/steamos-cec-toolkitctl debug-cec 3
-```
-
-Toggle user services:
-
-```bash
-~/.local/bin/steamos-cec-toolkitctl set-service steam-button on
-~/.local/bin/steamos-cec-toolkitctl set-service boot-wake on
-~/.local/bin/steamos-cec-toolkitctl set-service tv-standby off
-~/.local/bin/steamos-cec-toolkitctl set-service gamescope-recovery on
-```
-
-Toggle system-backed features:
-
-```bash
-~/.local/bin/steamos-cec-toolkitctl set-system-service power-standby on
-~/.local/bin/steamos-cec-toolkitctl set-system-service usb-wake on
-```
-
-Toggle SteamOS relative volume buttons:
-
-```bash
-~/.local/bin/steamos-cec-toolkitctl set-external-volume on
-~/.local/bin/steamos-cec-toolkitctl restart-external-volume
-```
-
-Update user-level configuration:
-
-```bash
-~/.local/bin/steamos-cec-toolkitctl set-config '{"CEC_DEVICE":"/dev/cec0"}'
-~/.local/bin/steamos-cec-toolkitctl set-config '{"CEC_VOLUME_INITIATOR":"0","CEC_AUDIO_LOGICAL_ADDRESS":"5"}'
-~/.local/bin/steamos-cec-toolkitctl set-config '{"HDMI_ALSA_CARD_NAME":"alsa_card.pci-0000_03_00.1","EXTERNAL_VOLUME_ROUTE":"hdmi-output-0"}'
-```
-
-Repair CEC device permissions after a SteamOS update or hotplug issue:
-
-```bash
-~/.local/bin/steamos-cec-toolkitctl repair-cec-permissions
-```
-
 Development builds can be installed from `main` with:
 
 ```bash
@@ -481,6 +419,68 @@ After changing config, rerun the installer or regenerate the WirePlumber file:
 
 ```bash
 ./install.sh --enable-steam-button
+```
+
+## Command-Line Control
+
+`steamos-cec-toolkitctl` is the CLI equivalent of the Decky control panel. It
+prints JSON so it can be used from SSH, scripts, or bug reports.
+
+Discovery and status:
+
+```bash
+~/.local/bin/steamos-cec-toolkitctl status
+~/.local/bin/steamos-cec-toolkitctl discover-cec
+~/.local/bin/steamos-cec-toolkitctl discover-audio
+~/.local/bin/steamos-cec-toolkitctl discover-input
+```
+
+Direct actions:
+
+```bash
+~/.local/bin/steamos-cec-toolkitctl wake
+~/.local/bin/steamos-cec-toolkitctl standby
+~/.local/bin/steamos-cec-toolkitctl volume up
+~/.local/bin/steamos-cec-toolkitctl volume down
+~/.local/bin/steamos-cec-toolkitctl volume mute
+~/.local/bin/steamos-cec-toolkitctl debug-cec 3
+```
+
+Toggle user services:
+
+```bash
+~/.local/bin/steamos-cec-toolkitctl set-service steam-button on
+~/.local/bin/steamos-cec-toolkitctl set-service boot-wake on
+~/.local/bin/steamos-cec-toolkitctl set-service tv-standby off
+~/.local/bin/steamos-cec-toolkitctl set-service gamescope-recovery on
+```
+
+Toggle system-backed features:
+
+```bash
+~/.local/bin/steamos-cec-toolkitctl set-system-service power-standby on
+~/.local/bin/steamos-cec-toolkitctl set-system-service usb-wake on
+```
+
+Toggle SteamOS relative volume buttons:
+
+```bash
+~/.local/bin/steamos-cec-toolkitctl set-external-volume on
+~/.local/bin/steamos-cec-toolkitctl restart-external-volume
+```
+
+Update user-level configuration:
+
+```bash
+~/.local/bin/steamos-cec-toolkitctl set-config '{"CEC_DEVICE":"/dev/cec0"}'
+~/.local/bin/steamos-cec-toolkitctl set-config '{"CEC_VOLUME_INITIATOR":"0","CEC_AUDIO_LOGICAL_ADDRESS":"5"}'
+~/.local/bin/steamos-cec-toolkitctl set-config '{"HDMI_ALSA_CARD_NAME":"alsa_card.pci-0000_03_00.1","EXTERNAL_VOLUME_ROUTE":"hdmi-output-0"}'
+```
+
+Repair CEC device permissions after a SteamOS update or hotplug issue:
+
+```bash
+~/.local/bin/steamos-cec-toolkitctl repair-cec-permissions
 ```
 
 ## Verify ExternalVolume
