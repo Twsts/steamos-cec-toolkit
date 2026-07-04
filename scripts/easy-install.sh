@@ -8,6 +8,26 @@ DECKY_PLUGIN_ZIP_URL="${DECKY_PLUGIN_ZIP_URL:-}"
 WORKDIR="${WORKDIR:-/tmp/steamos-cec-toolkit-install}"
 PLUGIN_DIR="${PLUGIN_DIR:-$HOME/homebrew/plugins}"
 PLUGIN_NAME="steamos-cec-toolkit"
+verify_atomic_update=0
+
+usage() {
+  cat <<'USAGE'
+Usage: steamos-cec-toolkit-installer.sh [options]
+
+Options:
+  --verify    Run SteamOS atomic-update persistence verification when supported
+  -h, --help  Show this help
+USAGE
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --verify) verify_atomic_update=1 ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "unknown option: $1" >&2; usage >&2; exit 2 ;;
+  esac
+  shift
+done
 
 say() {
   printf '\n%s\n' "$*"
@@ -187,6 +207,9 @@ if [[ "$enable_before_sleep" -eq 1 ]]; then
 fi
 if [[ "$enable_usb_wake" -eq 1 ]]; then
   install_args+=(--enable-usb-wake)
+fi
+if [[ "$verify_atomic_update" -eq 1 ]]; then
+  install_args+=(--verify)
 fi
 
 step "Installing CEC toolkit"

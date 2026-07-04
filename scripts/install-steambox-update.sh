@@ -136,6 +136,11 @@ if src="$(source_file "udev/70-steamos-cec-toolkit.rules")"; then
   udevadm control --reload-rules || true
 fi
 
+if src="$(source_file "config/atomic-update-steamos-cec-toolkit.conf")"; then
+  install -D -m 0644 "$src" \
+    /etc/atomic-update.conf.d/steamos-cec-toolkit.conf
+fi
+
 if src="$(source_file "systemd/system/steamos-cec-usb-wake.service")"; then
   install -m 0644 "$src" \
     /etc/systemd/system/steamos-cec-usb-wake.service

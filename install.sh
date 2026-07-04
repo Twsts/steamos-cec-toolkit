@@ -13,6 +13,7 @@ enable_gamescope_recovery=0
 enable_before_sleep=0
 enable_usb_wake=0
 restart_services=1
+verify_atomic_update=0
 
 usage() {
   cat <<'USAGE'
@@ -27,6 +28,7 @@ Options:
   --enable-usb-wake             Enable USB wake for Bluetooth/controller receivers (system service)
   --no-external-volume          Do not install the PipeWire ExternalVolume integration
   --no-restart                  Install files but do not restart user services
+  --verify                      Verify SteamOS atomic-update persistence after install when supported
   -h, --help                    Show this help
 
 Environment:
@@ -44,6 +46,7 @@ while [[ $# -gt 0 ]]; do
     --enable-usb-wake) enable_usb_wake=1 ;;
     --no-external-volume) enable_external_volume=0 ;;
     --no-restart) restart_services=0 ;;
+    --verify) verify_atomic_update=1 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "unknown option: $1" >&2; usage >&2; exit 2 ;;
   esac
@@ -59,6 +62,23 @@ require_command() {
   if ! command -v "$1" >/dev/null 2>&1; then
     echo "missing required command: $1" >&2
     exit 1
+  fi
+}
+
+verify_atomic_update_persistence() {
+  local holo_sync="/usr/lib/holo/holo-sync-var"
+
+  if [[ ! -x "$holo_sync" ]]; then
+    echo "SteamOS atomic-update verification skipped: $holo_sync is not available."
+    return 0
+  fi
+
+  echo "Verifying SteamOS atomic-update persistence with holo-sync-var dry run..."
+  if sudo "$holo_sync" --dry-run all; then
+    echo "SteamOS atomic-update dry run completed."
+  else
+    echo "warning: holo-sync-var dry run reported changes or errors; review the output above." >&2
+    return 1
   fi
 }
 
@@ -149,6 +169,8 @@ sudo install -D -m 0644 "$PROJECT_DIR/systemd/system/steamos-cec-usb-wake.servic
   /etc/systemd/system/steamos-cec-usb-wake.service
 sudo install -D -m 0644 "$PROJECT_DIR/udev/70-steamos-cec-toolkit.rules" \
   /etc/udev/rules.d/70-steamos-cec-toolkit.rules
+sudo install -D -m 0644 "$PROJECT_DIR/config/atomic-update-steamos-cec-toolkit.conf" \
+  /etc/atomic-update.conf.d/steamos-cec-toolkit.conf
 
 sudoers_tmp="$(mktemp)"
 {
@@ -225,6 +247,10 @@ if [[ "$restart_services" -eq 1 ]]; then
     systemctl --user start cec-audio-control.socket 2>/dev/null || true
     systemctl --user restart wireplumber.service
   fi
+fi
+
+if [[ "$verify_atomic_update" -eq 1 ]]; then
+  verify_atomic_update_persistence || true
 fi
 
 echo

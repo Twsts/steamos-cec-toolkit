@@ -160,6 +160,7 @@ Root files:
 
 ```text
 /etc/steamos-cec-toolkit.conf
+/etc/atomic-update.conf.d/steamos-cec-toolkit.conf
 /etc/sudoers.d/zz-steamos-cec-toolkit-volume
 /var/lib/steamos-cec-toolkit/steamos-cec-volume-raw
 /var/lib/steamos-cec-toolkit/steamos-cec-before-sleep
@@ -182,6 +183,16 @@ CEC device access can also change after suspend, hotplug, or a SteamOS update.
 The toolkit installs a small root helper, systemd unit, and udev rule to keep
 the configured `/dev/cec*` device readable and writable by the SteamOS desktop
 user so the user-level `cecd` service can reattach the adapter.
+
+On SteamOS systems with atomic-update support, the installer also writes:
+
+```text
+/etc/atomic-update.conf.d/steamos-cec-toolkit.conf
+```
+
+This asks SteamOS to preserve the toolkit-managed `/etc` files across OS
+updates, including the systemd units, udev rule, sudoers rule, system sleep hook,
+and toolkit config.
 
 ## SteamOS Updates and Recovery
 
@@ -223,6 +234,17 @@ keeps your runtime choices in:
 ```text
 ~/.config/steamos-cec-toolkit/config.conf
 ```
+
+To verify SteamOS atomic-update persistence on systems that include
+`holo-sync-var`, run:
+
+```bash
+bash <(curl -fsSL https://github.com/Twsts/steamos-cec-toolkit/releases/latest/download/steamos-cec-toolkit-installer.sh) --verify
+```
+
+The installer keeps the atomic update manifest installed either way. `--verify`
+adds a `holo-sync-var --dry-run all` check and reports if SteamOS would still
+discard project-managed files on the next update.
 
 After rerunning the installer, Decky users can open the plugin, run
 `Discover CEC Devices`, and toggle preferred features back on if needed. Without
