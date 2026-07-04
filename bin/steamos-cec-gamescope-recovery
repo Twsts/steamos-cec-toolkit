@@ -26,6 +26,8 @@ RECOVERY_DELAY_SECONDS = 3
 RESUME_RECOVERY_DELAY_SECONDS = 3
 RECOVERY_COOLDOWN_SECONDS = 30
 CONNECTOR_POLL_SECONDS = 1.0
+TV_POWER_POLL_SECONDS = 3.0
+TV_POWER_TIMEOUT_SECONDS = 2.0
 RUNTIME_DIR = Path(os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}"))
 COOLDOWN_FILE = RUNTIME_DIR / "steamos-cec-gamescope-recovery.last"
 
@@ -68,6 +70,20 @@ RECOVERY_COOLDOWN_SECONDS = float(
 CONNECTOR_POLL_SECONDS = float(
     CONFIG.get("GAMESCOPE_CONNECTOR_POLL_SECONDS", str(CONNECTOR_POLL_SECONDS))
 )
+CEC_DEVICE = CONFIG.get("CEC_DEVICE", "/dev/cec0")
+TV_LOGICAL_ADDRESS = CONFIG.get("TV_LOGICAL_ADDRESS", "0")
+RECOVER_ON_TV_POWER_ON = CONFIG.get("GAMESCOPE_RECOVER_ON_TV_POWER_ON", "1") not in {
+    "0",
+    "false",
+    "False",
+    "no",
+}
+TV_POWER_POLL_SECONDS = float(
+    CONFIG.get("GAMESCOPE_TV_POWER_POLL_SECONDS", str(TV_POWER_POLL_SECONDS))
+)
+TV_POWER_TIMEOUT_SECONDS = float(
+    CONFIG.get("GAMESCOPE_TV_POWER_TIMEOUT_SECONDS", str(TV_POWER_TIMEOUT_SECONDS))
+)
 
 
 def cooldown_remaining() -> float:
@@ -94,6 +110,13 @@ async def command(*args: str) -> tuple[int, str]:
     )
     stdout, _ = await process.communicate()
     return process.returncode, stdout.decode(errors="replace").strip()
+
+
+async def command_with_timeout(timeout: float, *args: str) -> tuple[int, str]:
+    try:
+        return await asyncio.wait_for(command(*args), timeout=timeout)
+    except asyncio.TimeoutError:
+        return 124, "timeout"
 
 
 async def recover_gamescope(reason: str, delay: float) -> None:
@@ -148,6 +171,32 @@ def connector_status() -> str:
         return "unknown"
 
 
+def parse_power_status(output: str) -> str:
+    for line in output.splitlines():
+        if "pwr-state:" not in line:
+            continue
+        return line.split("pwr-state:", 1)[1].split("(", 1)[0].strip().lower()
+    return "unknown"
+
+
+async def tv_power_status() -> str:
+    if not Path(CEC_DEVICE).exists():
+        return "missing-cec-device"
+    returncode, output = await command_with_timeout(
+        TV_POWER_TIMEOUT_SECONDS,
+        "cec-ctl",
+        "-d",
+        CEC_DEVICE,
+        "-s",
+        "--to",
+        TV_LOGICAL_ADDRESS,
+        "--give-device-power-status",
+    )
+    if returncode != 0:
+        return "unknown"
+    return parse_power_status(output)
+
+
 async def monitor_cec(state: dict[str, object]) -> None:
     bus = await MessageBus().connect()
     introspection = await bus.introspect(BUS_NAME, DEVICE_PATH)
@@ -196,6 +245,30 @@ async def monitor_connector(state: dict[str, object]) -> None:
         previous = current
 
 
+async def monitor_tv_power(state: dict[str, object]) -> None:
+    if not RECOVER_ON_TV_POWER_ON:
+        LOG.info("TV power recovery disabled by config")
+        await asyncio.get_running_loop().create_future()
+
+    previous = await tv_power_status()
+    state["tv_power_status"] = previous
+    LOG.info("Monitoring TV CEC power status; initial state=%s", previous)
+
+    while True:
+        await asyncio.sleep(TV_POWER_POLL_SECONDS)
+        current = await tv_power_status()
+        if current == previous:
+            continue
+
+        LOG.info("TV CEC power changed: %s -> %s", previous, current)
+        state["tv_power_status"] = current
+
+        if previous != "on" and current == "on" and state.get("active"):
+            schedule_recovery(state, "TV powered on while CEC source active")
+
+        previous = current
+
+
 async def monitor_sleep(state: dict[str, object]) -> None:
     if not RECOVER_AFTER_RESUME:
         LOG.info("Resume recovery disabled by config")
@@ -234,7 +307,12 @@ async def main() -> None:
             "last_recovery": 0.0,
             "task": None,
         }
-        await asyncio.gather(monitor_cec(state), monitor_connector(state), monitor_sleep(state))
+        await asyncio.gather(
+            monitor_cec(state),
+            monitor_connector(state),
+            monitor_tv_power(state),
+            monitor_sleep(state),
+        )
 
 
 if __name__ == "__main__":
