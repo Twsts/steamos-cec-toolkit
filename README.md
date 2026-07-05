@@ -192,7 +192,9 @@ On SteamOS systems with atomic-update support, the installer also writes:
 
 This asks SteamOS to preserve the toolkit-managed `/etc` files across OS
 updates, including the systemd units, udev rule, sudoers rule, system sleep hook,
-and toolkit config.
+and toolkit config. It reduces update breakage for files managed by this
+project, but it cannot protect Decky Loader, SteamOS internals, WirePlumber
+behavior changes, or files outside the configured keep-list.
 
 ## SteamOS Updates and Recovery
 

@@ -7,8 +7,23 @@ SteamOS updates can reset system-level pieces that this toolkit depends on:
 - `/etc/sudoers.d/zz-steamos-cec-toolkit-volume`
 - `/var/lib/steamos-cec-toolkit/*`
 - `/etc/systemd/system/steamos-cec-before-sleep.service`
+- `/etc/systemd/system/steamos-cec-permissions.service`
+- `/etc/systemd/system/steamos-cec-usb-wake.service`
+- `/etc/udev/rules.d/70-steamos-cec-toolkit.rules`
 - user service state and WirePlumber behavior
 - Decky Loader installation or plugin loading
+
+Version `v0.1.15` and newer install:
+
+```text
+/etc/atomic-update.conf.d/steamos-cec-toolkit.conf
+```
+
+On SteamOS builds that honor `/etc/atomic-update.conf.d`, this asks the OS to
+preserve the toolkit-managed `/etc` files across atomic updates. This reduces
+how often a SteamOS update breaks the toolkit, but it cannot protect Decky
+Loader, SteamOS internals, WirePlumber behavior changes, or files outside the
+configured keep-list.
 
 The Decky plugin should make this visible in `Status`:
 
@@ -21,6 +36,13 @@ Repair by rerunning the latest installer:
 
 ```bash
 bash <(curl -fsSL https://github.com/Twsts/steamos-cec-toolkit/releases/latest/download/steamos-cec-toolkit-installer.sh)
+```
+
+To also run SteamOS atomic-update verification when the SteamOS image provides
+`holo-sync-var`:
+
+```bash
+bash <(curl -fsSL https://github.com/Twsts/steamos-cec-toolkit/releases/latest/download/steamos-cec-toolkit-installer.sh) --verify
 ```
 
 Then open the plugin, run `Discover CEC Devices`, and re-enable the features
