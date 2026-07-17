@@ -9,6 +9,7 @@ enable_external_volume=1
 enable_steam_button=0
 enable_boot_wake=0
 enable_tv_standby=0
+enable_input_away_suspend=0
 enable_gamescope_recovery=0
 enable_before_sleep=0
 enable_usb_wake=0
@@ -23,6 +24,7 @@ Options:
   --enable-steam-button         Wake the TV/AVR and activate this HDMI input from the Steam button/controller wake
   --enable-boot-wake            Wake the TV/AVR and activate this HDMI input when SteamOS starts
   --enable-tv-standby-suspend   Suspend SteamOS when the TV broadcasts HDMI-CEC standby
+  --enable-input-away-suspend   Suspend SteamOS after this HDMI-CEC source is no longer active
   --enable-gamescope-recovery   Restart Gamescope after CEC source activation if the display gets stuck
   --enable-before-sleep         Send HDMI-CEC standby before SteamOS sleeps (system service)
   --enable-usb-wake             Enable USB wake for Bluetooth/controller receivers (system service)
@@ -41,6 +43,7 @@ while [[ $# -gt 0 ]]; do
     --enable-steam-button) enable_steam_button=1 ;;
     --enable-boot-wake) enable_boot_wake=1 ;;
     --enable-tv-standby-suspend) enable_tv_standby=1 ;;
+    --enable-input-away-suspend) enable_input_away_suspend=1 ;;
     --enable-gamescope-recovery) enable_gamescope_recovery=1 ;;
     --enable-before-sleep) enable_before_sleep=1 ;;
     --enable-usb-wake) enable_usb_wake=1 ;;
@@ -128,6 +131,8 @@ install -m 0755 "$PROJECT_DIR/bin/steamos-cec-boot-wake" "$HOME/.local/bin/steam
 install -m 0755 "$PROJECT_DIR/bin/steamos-cec-steam-button" "$HOME/.local/bin/steamos-cec-steam-button"
 install -m 0755 "$PROJECT_DIR/bin/steamos-cec-tv-standby-suspend" \
   "$HOME/.local/bin/steamos-cec-tv-standby-suspend"
+install -m 0755 "$PROJECT_DIR/bin/steamos-cec-input-away-suspend" \
+  "$HOME/.local/bin/steamos-cec-input-away-suspend"
 install -m 0755 "$PROJECT_DIR/bin/steamos-cec-gamescope-recovery" \
   "$HOME/.local/bin/steamos-cec-gamescope-recovery"
 
@@ -202,12 +207,14 @@ install -m 0644 "$PROJECT_DIR/systemd/user/steamos-cec-boot-wake.service" \
   "$HOME/.config/systemd/user/steamos-cec-boot-wake.service"
 install -m 0644 "$PROJECT_DIR/systemd/user/steamos-cec-tv-standby-suspend.service" \
   "$HOME/.config/systemd/user/steamos-cec-tv-standby-suspend.service"
+install -m 0644 "$PROJECT_DIR/systemd/user/steamos-cec-input-away-suspend.service" \
+  "$HOME/.config/systemd/user/steamos-cec-input-away-suspend.service"
 install -m 0644 "$PROJECT_DIR/systemd/user/steamos-cec-gamescope-recovery.service" \
   "$HOME/.config/systemd/user/steamos-cec-gamescope-recovery.service"
 
-if [[ "$enable_tv_standby" -eq 1 || "$enable_gamescope_recovery" -eq 1 ]]; then
+if [[ "$enable_tv_standby" -eq 1 || "$enable_input_away_suspend" -eq 1 || "$enable_gamescope_recovery" -eq 1 ]]; then
   if ! python3 -c 'import dbus_next' >/dev/null 2>&1; then
-    echo "warning: python module dbus_next is missing; TV standby/Gamescope recovery services may fail" >&2
+    echo "warning: python module dbus_next is missing; CEC monitor services may fail" >&2
   fi
 fi
 
@@ -227,6 +234,9 @@ if [[ "$enable_boot_wake" -eq 1 ]]; then
 fi
 if [[ "$enable_tv_standby" -eq 1 ]]; then
   systemctl --user enable --now steamos-cec-tv-standby-suspend.service
+fi
+if [[ "$enable_input_away_suspend" -eq 1 ]]; then
+  systemctl --user enable --now steamos-cec-input-away-suspend.service
 fi
 if [[ "$enable_gamescope_recovery" -eq 1 ]]; then
   systemctl --user enable --now steamos-cec-gamescope-recovery.service

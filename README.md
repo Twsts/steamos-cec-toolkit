@@ -19,6 +19,8 @@ It was built for a living-room SteamOS box where:
 - SteamOS should be able to send TV standby when the system sleeps or shuts
   down.
 - SteamOS can optionally suspend when the TV broadcasts HDMI-CEC standby.
+- SteamOS can optionally suspend after the TV/AVR switches away from the
+  SteamOS HDMI-CEC source.
 - Supported Bluetooth adapters and controller receivers can optionally be set up
   to wake SteamOS from suspend before the toolkit sends CEC wake/input
   selection.
@@ -142,6 +144,7 @@ User files:
 ~/.local/bin/steamos-cec-boot-wake
 ~/.local/bin/steamos-cec-steam-button
 ~/.local/bin/steamos-cec-tv-standby-suspend
+~/.local/bin/steamos-cec-input-away-suspend
 ~/.local/bin/steamos-cec-gamescope-recovery
 ~/.config/systemd/user/cec-audio-control.service.d/override.conf
 ~/.config/systemd/user/steamos-cec-*.service
@@ -317,6 +320,7 @@ Install everything:
   --enable-steam-button \
   --enable-boot-wake \
   --enable-tv-standby-suspend \
+  --enable-input-away-suspend \
   --enable-gamescope-recovery \
   --enable-before-sleep \
   --enable-usb-wake
@@ -366,9 +370,9 @@ can:
 - show ExternalVolume/toolkit status
 - toggle SteamOS CEC volume buttons on/off so you can switch between relative
   `+ / -` control and the normal SteamOS volume bar
-- toggle controller wake/input switching, boot wake/input switching, TV standby suspend, SteamOS
-  sleep/shutdown TV standby, Bluetooth/controller wake from suspend, and
-  Gamescope recovery
+- toggle controller wake/input switching, boot wake/input switching, TV standby
+  suspend, input-away suspend, SteamOS sleep/shutdown TV standby,
+  Bluetooth/controller wake from suspend, and Gamescope recovery
 - discover CEC devices and choose the volume initiator/audio target from
   dropdowns
 - test TV wake/input selection
@@ -476,6 +480,7 @@ Toggle user services:
 ~/.local/bin/steamos-cec-toolkitctl set-service steam-button on
 ~/.local/bin/steamos-cec-toolkitctl set-service boot-wake on
 ~/.local/bin/steamos-cec-toolkitctl set-service tv-standby off
+~/.local/bin/steamos-cec-toolkitctl set-service input-away-suspend on
 ~/.local/bin/steamos-cec-toolkitctl set-service gamescope-recovery on
 ```
 
@@ -667,6 +672,28 @@ Then it runs:
 ```bash
 systemctl suspend
 ```
+
+## Optional Input Away Suspend
+
+Enable with:
+
+```bash
+./install.sh --enable-input-away-suspend
+```
+
+This watches the SteamOS CEC device `Active` property from `cecd`. When the
+TV/AVR switches away from this HDMI input, `Active` changes from `true` to
+`false`. The service waits for a configurable delay, then suspends SteamOS if
+the input did not become active again.
+
+The delay prevents false suspends during short HDMI/CEC routing glitches:
+
+```bash
+INPUT_AWAY_SUSPEND_DELAY_SECONDS=60
+```
+
+From the Decky plugin, enable `Input Away Suspends SteamOS` under Features. When
+enabled, use `Input Away Delay` under Configuration to choose the delay.
 
 ## Optional SteamOS Sleep/Shutdown CEC Standby
 

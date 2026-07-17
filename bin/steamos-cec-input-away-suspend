@@ -1,0 +1,139 @@
+#!/usr/bin/env python3
+"""Suspend SteamOS when the TV/AVR switches away from this HDMI-CEC source."""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+import os
+import time
+
+from dbus_next.aio import MessageBus
+
+
+BUS_NAME = "com.steampowered.CecDaemon1"
+DEVICE_PATH = "/com/steampowered/CecDaemon1/Devices/Cec0"
+DEVICE_INTERFACE = "com.steampowered.CecDaemon1.CecDevice1"
+PROPERTIES_INTERFACE = "org.freedesktop.DBus.Properties"
+LOCAL_SUSPEND_MARKER = "/run/steamos-cec-local-suspend"
+DEFAULT_CONFIG = "/etc/steamos-cec-toolkit.conf"
+DEFAULT_DELAY_SECONDS = 60
+
+logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+LOG = logging.getLogger("steamos-cec-input-away-suspend")
+
+
+def read_config(path: str = DEFAULT_CONFIG) -> dict[str, str]:
+    config: dict[str, str] = {}
+    try:
+        with open(path, encoding="utf-8") as file:
+            for raw_line in file:
+                line = raw_line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, value = line.split("=", 1)
+                config[key.strip()] = value.strip().strip('"').strip("'")
+    except FileNotFoundError:
+        pass
+    return config
+
+
+CONFIG = read_config(os.environ.get("STEAMOS_CEC_CONFIG", DEFAULT_CONFIG))
+STEAMOS_CEC_USER = CONFIG.get("STEAMOS_CEC_USER", "deck")
+USER_CONFIG = f"/home/{STEAMOS_CEC_USER}/.config/steamos-cec-toolkit/config.conf"
+CONFIG.update(read_config(USER_CONFIG))
+INPUT_AWAY_SUSPEND_DELAY_SECONDS = max(
+    5,
+    int(float(CONFIG.get("INPUT_AWAY_SUSPEND_DELAY_SECONDS", str(DEFAULT_DELAY_SECONDS)))),
+)
+
+
+def local_suspend_in_progress() -> bool:
+    try:
+        return time.time() - os.stat(LOCAL_SUSPEND_MARKER).st_mtime < 30
+    except FileNotFoundError:
+        return False
+
+
+async def suspend() -> None:
+    if local_suspend_in_progress():
+        LOG.info("Ignoring input-away suspend during local suspend/shutdown")
+        return
+
+    process = await asyncio.create_subprocess_exec(
+        "systemctl",
+        "suspend",
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.STDOUT,
+    )
+    stdout, _ = await process.communicate()
+    if process.returncode != 0:
+        LOG.warning("Suspend failed: %s", stdout.decode(errors="replace").strip())
+
+
+async def delayed_suspend(state: dict[str, object]) -> None:
+    delay = INPUT_AWAY_SUSPEND_DELAY_SECONDS
+    LOG.info("CEC source inactive; suspending SteamOS in %ss if input does not return", delay)
+    await asyncio.sleep(delay)
+    if state.get("active"):
+        LOG.info("CEC source became active again; input-away suspend cancelled")
+        return
+    LOG.info("CEC source still inactive after %ss; suspending SteamOS", delay)
+    await suspend()
+
+
+def schedule_suspend(state: dict[str, object]) -> None:
+    if local_suspend_in_progress():
+        LOG.info("Ignoring inactive CEC source during local suspend/shutdown")
+        return
+    task = state.get("task")
+    if task is not None and not task.done():
+        return
+    state["task"] = asyncio.create_task(delayed_suspend(state))
+
+
+def cancel_suspend(state: dict[str, object]) -> None:
+    task = state.get("task")
+    if task is not None and not task.done():
+        task.cancel()
+        LOG.info("CEC source active; input-away suspend cancelled")
+    state["task"] = None
+
+
+async def main() -> None:
+    bus = await MessageBus().connect()
+    introspection = await bus.introspect(BUS_NAME, DEVICE_PATH)
+    proxy = bus.get_proxy_object(BUS_NAME, DEVICE_PATH, introspection)
+    properties = proxy.get_interface(PROPERTIES_INTERFACE)
+
+    active_variant = await properties.call_get(DEVICE_INTERFACE, "Active")
+    state: dict[str, object] = {
+        "active": bool(active_variant.value),
+        "task": None,
+    }
+
+    def properties_changed(interface_name, changed, _invalidated):
+        if interface_name != DEVICE_INTERFACE or "Active" not in changed:
+            return
+
+        active = bool(changed["Active"].value)
+        previous = bool(state.get("active"))
+        state["active"] = active
+        LOG.info("CEC Active changed: %s -> %s", previous, active)
+
+        if previous and not active:
+            schedule_suspend(state)
+        elif active:
+            cancel_suspend(state)
+
+    properties.on_properties_changed(properties_changed)
+    LOG.info(
+        "Monitoring CEC source active state for input-away suspend; initial state=%s, delay=%ss",
+        state["active"],
+        INPUT_AWAY_SUSPEND_DELAY_SECONDS,
+    )
+    await asyncio.get_running_loop().create_future()
+
+
+if __name__ == "__main__":
+    asyncio.run(main())

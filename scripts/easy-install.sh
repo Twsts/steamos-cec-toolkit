@@ -139,6 +139,7 @@ fi
 enable_steam_button=0
 enable_boot_wake=0
 enable_tv_standby=0
+enable_input_away_suspend=0
 enable_gamescope_recovery=0
 enable_before_sleep=0
 enable_usb_wake=0
@@ -146,6 +147,7 @@ enable_usb_wake=0
 steam_button_default="$(service_default user steamos-cec-steam-button.service yes)"
 boot_wake_default="$(service_default user steamos-cec-boot-wake.service no)"
 tv_standby_default="$(service_default user steamos-cec-tv-standby-suspend.service no)"
+input_away_suspend_default="$(service_default user steamos-cec-input-away-suspend.service no)"
 before_sleep_default="$(service_default system steamos-cec-before-sleep.service yes)"
 usb_wake_default="$(service_default system steamos-cec-usb-wake.service no)"
 gamescope_recovery_default="$(service_default user steamos-cec-gamescope-recovery.service no)"
@@ -158,6 +160,9 @@ if ask_yes_no "Enable wake and input switching when SteamOS starts?" "$boot_wake
 fi
 if ask_yes_no "Enable TV standby suspends SteamOS?" "$tv_standby_default"; then
   enable_tv_standby=1
+fi
+if ask_yes_no "Enable input-away suspends SteamOS?" "$input_away_suspend_default"; then
+  enable_input_away_suspend=1
 fi
 if ask_yes_no "Enable SteamOS sleep/shutdown turns off TV?" "$before_sleep_default"; then
   enable_before_sleep=1
@@ -198,6 +203,9 @@ if [[ "$enable_boot_wake" -eq 1 ]]; then
 fi
 if [[ "$enable_tv_standby" -eq 1 ]]; then
   install_args+=(--enable-tv-standby-suspend)
+fi
+if [[ "$enable_input_away_suspend" -eq 1 ]]; then
+  install_args+=(--enable-input-away-suspend)
 fi
 if [[ "$enable_gamescope_recovery" -eq 1 ]]; then
   install_args+=(--enable-gamescope-recovery)

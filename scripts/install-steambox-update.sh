@@ -62,6 +62,7 @@ for user_script in \
   steamos-cec-boot-wake \
   steamos-cec-steam-button \
   steamos-cec-tv-standby-suspend \
+  steamos-cec-input-away-suspend \
   steamos-cec-gamescope-recovery
 do
   if src="$(source_file "bin/$user_script")"; then
@@ -74,6 +75,7 @@ for user_unit in \
   steamos-cec-boot-wake.service \
   steamos-cec-steam-button.service \
   steamos-cec-tv-standby-suspend.service \
+  steamos-cec-input-away-suspend.service \
   steamos-cec-gamescope-recovery.service
 do
   if src="$(source_file "systemd/user/$user_unit")"; then

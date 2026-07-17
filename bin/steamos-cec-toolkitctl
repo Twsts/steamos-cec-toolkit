@@ -30,6 +30,7 @@ VOLUME_SCRIPT = Path.home() / ".local/bin/steamos-cec-volume"
 BOOT_WAKE_SCRIPT = Path.home() / ".local/bin/steamos-cec-boot-wake"
 STEAM_BUTTON_SCRIPT = Path.home() / ".local/bin/steamos-cec-steam-button"
 TV_STANDBY_SCRIPT = Path.home() / ".local/bin/steamos-cec-tv-standby-suspend"
+INPUT_AWAY_SUSPEND_SCRIPT = Path.home() / ".local/bin/steamos-cec-input-away-suspend"
 GAMESCOPE_RECOVERY_SCRIPT = Path.home() / ".local/bin/steamos-cec-gamescope-recovery"
 WIREPLUMBER_CONFIG = (
     Path.home()
@@ -92,6 +93,7 @@ USER_SERVICES = {
     "boot-wake": "steamos-cec-boot-wake.service",
     "steam-button": "steamos-cec-steam-button.service",
     "tv-standby": "steamos-cec-tv-standby-suspend.service",
+    "input-away-suspend": "steamos-cec-input-away-suspend.service",
     "gamescope-recovery": "steamos-cec-gamescope-recovery.service",
 }
 
@@ -708,6 +710,7 @@ def status() -> dict[str, Any]:
         "boot_wake_script_exists": BOOT_WAKE_SCRIPT.exists(),
         "steam_button_script_exists": STEAM_BUTTON_SCRIPT.exists(),
         "tv_standby_script_exists": TV_STANDBY_SCRIPT.exists(),
+        "input_away_suspend_script_exists": INPUT_AWAY_SUSPEND_SCRIPT.exists(),
         "gamescope_recovery_script_exists": GAMESCOPE_RECOVERY_SCRIPT.exists(),
         "external_volume": external_volume_state(),
         "controller_wake": {
@@ -776,6 +779,8 @@ def set_config(updates: dict[str, str]) -> dict[str, Any]:
         write_user_config(updates)
     except ValueError as error:
         return {"ok": False, "error": str(error)}
+    if "INPUT_AWAY_SUSPEND_DELAY_SECONDS" in updates:
+        systemctl_user("try-restart", USER_SERVICES["input-away-suspend"])
     payload = status()
     payload["action"] = {"ok": True, "returncode": 0, "stdout": str(USER_CONFIG_FILE)}
     return payload

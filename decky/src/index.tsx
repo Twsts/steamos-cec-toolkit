@@ -47,6 +47,7 @@ type Status = {
   external_volume?: ExternalVolumeState;
   steam_button_script_exists?: boolean;
   tv_standby_script_exists?: boolean;
+  input_away_suspend_script_exists?: boolean;
   gamescope_recovery_script_exists?: boolean;
   controller_wake?: ControllerWakeState;
   services?: Record<string, ServiceState>;
@@ -300,6 +301,7 @@ function needsInstallHelp(status: Status | null): boolean {
     !status.external_volume_script_exists ||
     !status.steam_button_script_exists ||
     !status.tv_standby_script_exists ||
+    !status.input_away_suspend_script_exists ||
     !status.gamescope_recovery_script_exists
   );
 }
@@ -341,6 +343,9 @@ function missingItems(status: Status | null): string[] {
   }
   if (!status.tv_standby_script_exists) {
     items.push("TV standby suspend helper");
+  }
+  if (!status.input_away_suspend_script_exists) {
+    items.push("input-away suspend helper");
   }
   if (!status.gamescope_recovery_script_exists) {
     items.push("Gamescope recovery helper");
@@ -562,6 +567,7 @@ function Content() {
   const steamButton = status?.services?.["steam-button"];
   const bootWake = status?.services?.["boot-wake"];
   const tvStandby = status?.services?.["tv-standby"];
+  const inputAwaySuspend = status?.services?.["input-away-suspend"];
   const gamescopeRecovery = status?.services?.["gamescope-recovery"];
   const powerStandby = status?.system_services?.["power-standby"];
   const usbWake = status?.system_services?.["usb-wake"];
@@ -582,6 +588,7 @@ function Content() {
   const audioTarget = configValue(status, "CEC_AUDIO_LOGICAL_ADDRESS", discovered?.suggested?.CEC_AUDIO_LOGICAL_ADDRESS || "5");
   const audioCardName = configValue(status, "HDMI_ALSA_CARD_NAME", audioDiscovery?.suggested?.HDMI_ALSA_CARD_NAME || "alsa_card.pci-0000_03_00.1");
   const audioRoute = configValue(status, "EXTERNAL_VOLUME_ROUTE", audioDiscovery?.suggested?.EXTERNAL_VOLUME_ROUTE || "hdmi-output-0");
+  const inputAwayDelay = configValue(status, "INPUT_AWAY_SUSPEND_DELAY_SECONDS", "60");
   const audioCardOptions = (audioDiscovery?.cards || []).map((card) => ({
     data: card.name,
     label: card.label,
@@ -590,6 +597,12 @@ function Content() {
     data: route,
     label: route,
   }));
+  const inputAwayDelayOptions = [
+    { data: "30", label: "30 seconds" },
+    { data: "60", label: "1 minute" },
+    { data: "120", label: "2 minutes" },
+    { data: "300", label: "5 minutes" },
+  ];
 
   return (
     <>
@@ -642,6 +655,15 @@ function Content() {
             checked={!!tvStandby?.is_enabled}
             disabled={busy || !status?.tv_standby_script_exists}
             onChange={(enabled: boolean) => void runAction(() => setService("tv-standby", enabled))}
+          />
+        </PanelSectionRow>
+        <PanelSectionRow>
+          <ToggleField
+            label="Input Away Suspends SteamOS"
+            description="Suspend SteamOS after this HDMI input is no longer active"
+            checked={!!inputAwaySuspend?.is_enabled}
+            disabled={busy || !status?.input_away_suspend_script_exists}
+            onChange={(enabled: boolean) => void runAction(() => setService("input-away-suspend", enabled))}
           />
         </PanelSectionRow>
         <PanelSectionRow>
@@ -729,6 +751,18 @@ function Content() {
               selectedOption={cecDevice}
               disabled={busy}
               onChange={(option) => void runAction(() => setConfig({ CEC_DEVICE: String(option.data) }))}
+            />
+          </PanelSectionRow>
+        )}
+        {inputAwaySuspend?.is_enabled && (
+          <PanelSectionRow>
+            <DropdownItem
+              label="Input Away Delay"
+              description="How long to wait before suspending after this CEC source becomes inactive"
+              rgOptions={inputAwayDelayOptions}
+              selectedOption={inputAwayDelay}
+              disabled={busy}
+              onChange={(option) => void runAction(() => setConfig({ INPUT_AWAY_SUSPEND_DELAY_SECONDS: String(option.data) }))}
             />
           </PanelSectionRow>
         )}
