@@ -16,6 +16,8 @@ STEAMOS_CEC_UID="$(id -u "$STEAMOS_CEC_USER")"
 CEC_DEVICE="${CEC_DEVICE:-/dev/cec0}"
 TV_LOGICAL_ADDRESS="${TV_LOGICAL_ADDRESS:-0}"
 CEC_PLAYBACK_LOGICAL_ADDRESS="${CEC_PLAYBACK_LOGICAL_ADDRESS:-4}"
+TV_STANDBY_SETTLE_SECONDS="${TV_STANDBY_SETTLE_SECONDS:-2}"
+INPUT_INACTIVE_SUSPEND_MARKER="/run/user/$STEAMOS_CEC_UID/steamos-cec-input-inactive-suspend"
 
 touch /run/steamos-cec-local-suspend
 
@@ -26,16 +28,47 @@ run_as_user_bus() {
     "$@"
 }
 
-echo "steamos-cec: sending TV standby before sleep/shutdown"
+current_playback_logical_address() {
+  local logical
+  logical="$(
+    /usr/bin/cec-ctl -d "$CEC_DEVICE" -S 2>/dev/null |
+      awk '/^[[:space:]]+Logical Address[[:space:]]+:/ {print $4; exit}'
+  )"
+  if [[ "$logical" =~ ^[0-9]+$ ]]; then
+    printf '%s\n' "$logical"
+  else
+    printf '%s\n' "$CEC_PLAYBACK_LOGICAL_ADDRESS"
+  fi
+}
 
-if [[ -e "$CEC_DEVICE" ]]; then
+send_native_standby() {
+  /usr/bin/cec-ctl -d "$CEC_DEVICE" -s --to "$1" --standby || true
+}
+
+send_raw_standby() {
+  local source="$1"
+  local target="$2"
   /usr/bin/cec-ctl -d "$CEC_DEVICE" -s --raw-msg \
-    -f "$CEC_PLAYBACK_LOGICAL_ADDRESS" -t "$TV_LOGICAL_ADDRESS" \
+    -f "$source" -t "$target" \
     --custom-command cmd=0x36 || true
-  /usr/bin/cec-ctl -d "$CEC_DEVICE" -s --raw-msg \
-    -f "$CEC_PLAYBACK_LOGICAL_ADDRESS" -t 15 \
-    --custom-command cmd=0x36 || true
+}
+
+input_inactive_suspend_in_progress() {
+  [[ -e "$INPUT_INACTIVE_SUSPEND_MARKER" ]] || return 1
+
+  local marker_mtime now age
+  marker_mtime="$(stat -c %Y "$INPUT_INACTIVE_SUSPEND_MARKER" 2>/dev/null || printf 0)"
+  now="$(date +%s)"
+  age=$((now - marker_mtime))
+  [[ "$age" -ge 0 && "$age" -lt 180 ]]
+}
+
+if input_inactive_suspend_in_progress; then
+  echo "steamos-cec: input-inactive suspend detected; skipping TV/AVR standby"
+  exit 0
 fi
+
+echo "steamos-cec: sending TV standby before sleep/shutdown"
 
 run_as_user_bus busctl --user call \
   com.steampowered.CecDaemon1 \
@@ -51,4 +84,20 @@ run_as_user_bus busctl --user call \
   Standby y "$TV_LOGICAL_ADDRESS" \
   || true
 
-sleep 1
+if [[ -e "$CEC_DEVICE" ]]; then
+  playback_logical_address="$(current_playback_logical_address)"
+  echo "steamos-cec: CEC standby source logical address $playback_logical_address"
+
+  send_native_standby "$TV_LOGICAL_ADDRESS"
+  sleep 0.25
+  send_native_standby 15
+
+  for delay in 0.5 1.0; do
+    sleep "$delay"
+    send_raw_standby "$playback_logical_address" "$TV_LOGICAL_ADDRESS"
+    sleep 0.25
+    send_raw_standby "$playback_logical_address" 15
+  done
+fi
+
+sleep "$TV_STANDBY_SETTLE_SECONDS"

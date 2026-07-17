@@ -42,6 +42,10 @@ CONFIG = read_config(os.environ.get("STEAMOS_CEC_CONFIG", DEFAULT_CONFIG))
 STEAMOS_CEC_USER = CONFIG.get("STEAMOS_CEC_USER", "deck")
 USER_CONFIG = f"/home/{STEAMOS_CEC_USER}/.config/steamos-cec-toolkit/config.conf"
 CONFIG.update(read_config(USER_CONFIG))
+INPUT_INACTIVE_SUSPEND_MARKER = os.path.join(
+    os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}"),
+    "steamos-cec-input-inactive-suspend",
+)
 INPUT_INACTIVE_SUSPEND_DELAY_SECONDS = max(
     5,
     int(float(
@@ -65,6 +69,12 @@ async def suspend() -> None:
         LOG.info("Ignoring input-inactive suspend during local suspend/shutdown")
         return
 
+    try:
+        with open(INPUT_INACTIVE_SUSPEND_MARKER, "w", encoding="utf-8") as marker:
+            marker.write(str(time.time()))
+    except OSError as error:
+        LOG.warning("Could not write input-inactive suspend marker: %s", error)
+
     process = await asyncio.create_subprocess_exec(
         "systemctl",
         "suspend",
@@ -73,6 +83,12 @@ async def suspend() -> None:
     )
     stdout, _ = await process.communicate()
     if process.returncode != 0:
+        try:
+            os.unlink(INPUT_INACTIVE_SUSPEND_MARKER)
+        except FileNotFoundError:
+            pass
+        except OSError as error:
+            LOG.warning("Could not remove input-inactive suspend marker: %s", error)
         LOG.warning("Suspend failed: %s", stdout.decode(errors="replace").strip())
 
 

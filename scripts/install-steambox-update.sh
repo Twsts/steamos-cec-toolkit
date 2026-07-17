@@ -166,6 +166,7 @@ chmod -R a+rX "$PLUGIN_DIR/steamos-cec-toolkit"
 run_user_systemctl daemon-reload
 run_user_systemctl try-restart steamos-cec-boot-wake.service || true
 run_user_systemctl try-restart steamos-cec-steam-button.service || true
+run_user_systemctl try-restart steamos-cec-input-away-suspend.service || true
 run_user_systemctl try-restart steamos-cec-gamescope-recovery.service || true
 systemctl restart plugin_loader.service
 
