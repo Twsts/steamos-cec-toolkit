@@ -779,7 +779,10 @@ def set_config(updates: dict[str, str]) -> dict[str, Any]:
         write_user_config(updates)
     except ValueError as error:
         return {"ok": False, "error": str(error)}
-    if "INPUT_AWAY_SUSPEND_DELAY_SECONDS" in updates:
+    if (
+        "INPUT_INACTIVE_SUSPEND_DELAY_SECONDS" in updates
+        or "INPUT_AWAY_SUSPEND_DELAY_SECONDS" in updates
+    ):
         systemctl_user("try-restart", USER_SERVICES["input-away-suspend"])
     payload = status()
     payload["action"] = {"ok": True, "returncode": 0, "stdout": str(USER_CONFIG_FILE)}

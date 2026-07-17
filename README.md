@@ -320,7 +320,7 @@ Install everything:
   --enable-steam-button \
   --enable-boot-wake \
   --enable-tv-standby-suspend \
-  --enable-input-away-suspend \
+  --enable-input-inactive-suspend \
   --enable-gamescope-recovery \
   --enable-before-sleep \
   --enable-usb-wake
@@ -371,7 +371,7 @@ can:
 - toggle SteamOS CEC volume buttons on/off so you can switch between relative
   `+ / -` control and the normal SteamOS volume bar
 - toggle controller wake/input switching, boot wake/input switching, TV standby
-  suspend, input-away suspend, SteamOS sleep/shutdown TV standby,
+  suspend, input inactive suspend, SteamOS sleep/shutdown TV standby,
   Bluetooth/controller wake from suspend, and Gamescope recovery
 - discover CEC devices and choose the volume initiator/audio target from
   dropdowns
@@ -673,12 +673,12 @@ Then it runs:
 systemctl suspend
 ```
 
-## Optional Input Away Suspend
+## Optional Input Inactive Suspend
 
 Enable with:
 
 ```bash
-./install.sh --enable-input-away-suspend
+./install.sh --enable-input-inactive-suspend
 ```
 
 This watches the SteamOS CEC device `Active` property from `cecd`. When the
@@ -689,11 +689,11 @@ the input did not become active again.
 The delay prevents false suspends during short HDMI/CEC routing glitches:
 
 ```bash
-INPUT_AWAY_SUSPEND_DELAY_SECONDS=60
+INPUT_INACTIVE_SUSPEND_DELAY_SECONDS=60
 ```
 
-From the Decky plugin, enable `Input Away Suspends SteamOS` under Features. When
-enabled, use `Input Away Delay` under Configuration to choose the delay.
+From the Decky plugin, enable `Input Inactive Suspends SteamOS` under Features. When
+enabled, use `Input Inactive Delay` under Configuration to choose the delay.
 
 ## Optional SteamOS Sleep/Shutdown CEC Standby
 

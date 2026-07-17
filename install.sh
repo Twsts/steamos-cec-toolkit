@@ -24,7 +24,8 @@ Options:
   --enable-steam-button         Wake the TV/AVR and activate this HDMI input from the Steam button/controller wake
   --enable-boot-wake            Wake the TV/AVR and activate this HDMI input when SteamOS starts
   --enable-tv-standby-suspend   Suspend SteamOS when the TV broadcasts HDMI-CEC standby
-  --enable-input-away-suspend   Suspend SteamOS after this HDMI-CEC source is no longer active
+  --enable-input-inactive-suspend
+                                Suspend SteamOS after this HDMI-CEC source is no longer active
   --enable-gamescope-recovery   Restart Gamescope after CEC source activation if the display gets stuck
   --enable-before-sleep         Send HDMI-CEC standby before SteamOS sleeps (system service)
   --enable-usb-wake             Enable USB wake for Bluetooth/controller receivers (system service)
@@ -43,7 +44,7 @@ while [[ $# -gt 0 ]]; do
     --enable-steam-button) enable_steam_button=1 ;;
     --enable-boot-wake) enable_boot_wake=1 ;;
     --enable-tv-standby-suspend) enable_tv_standby=1 ;;
-    --enable-input-away-suspend) enable_input_away_suspend=1 ;;
+    --enable-input-inactive-suspend|--enable-input-away-suspend) enable_input_away_suspend=1 ;;
     --enable-gamescope-recovery) enable_gamescope_recovery=1 ;;
     --enable-before-sleep) enable_before_sleep=1 ;;
     --enable-usb-wake) enable_usb_wake=1 ;;

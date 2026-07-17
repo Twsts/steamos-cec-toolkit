@@ -62,9 +62,9 @@ TV_LOGICAL_ADDRESS=0
 CEC_PLAYBACK_LOGICAL_ADDRESS=4
 CEC_STANDBY_OPCODE=0x36
 
-# Optional input-away suspend service.
+# Optional input inactive suspend service.
 # Suspends SteamOS after this CEC source is no longer active for the delay.
-INPUT_AWAY_SUSPEND_DELAY_SECONDS=60
+INPUT_INACTIVE_SUSPEND_DELAY_SECONDS=60
 
 # Optional Gamescope recovery service after CEC source activation.
 GAMESCOPE_CONNECTOR_STATUS=/sys/class/drm/card0-DP-1/status

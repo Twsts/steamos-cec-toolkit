@@ -161,7 +161,7 @@ fi
 if ask_yes_no "Enable TV standby suspends SteamOS?" "$tv_standby_default"; then
   enable_tv_standby=1
 fi
-if ask_yes_no "Enable input-away suspends SteamOS?" "$input_away_suspend_default"; then
+if ask_yes_no "Enable input inactive suspends SteamOS?" "$input_away_suspend_default"; then
   enable_input_away_suspend=1
 fi
 if ask_yes_no "Enable SteamOS sleep/shutdown turns off TV?" "$before_sleep_default"; then
@@ -205,7 +205,7 @@ if [[ "$enable_tv_standby" -eq 1 ]]; then
   install_args+=(--enable-tv-standby-suspend)
 fi
 if [[ "$enable_input_away_suspend" -eq 1 ]]; then
-  install_args+=(--enable-input-away-suspend)
+  install_args+=(--enable-input-inactive-suspend)
 fi
 if [[ "$enable_gamescope_recovery" -eq 1 ]]; then
   install_args+=(--enable-gamescope-recovery)

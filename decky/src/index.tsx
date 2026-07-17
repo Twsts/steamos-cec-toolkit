@@ -345,7 +345,7 @@ function missingItems(status: Status | null): string[] {
     items.push("TV standby suspend helper");
   }
   if (!status.input_away_suspend_script_exists) {
-    items.push("input-away suspend helper");
+    items.push("input inactive suspend helper");
   }
   if (!status.gamescope_recovery_script_exists) {
     items.push("Gamescope recovery helper");
@@ -567,7 +567,7 @@ function Content() {
   const steamButton = status?.services?.["steam-button"];
   const bootWake = status?.services?.["boot-wake"];
   const tvStandby = status?.services?.["tv-standby"];
-  const inputAwaySuspend = status?.services?.["input-away-suspend"];
+  const inputInactiveSuspend = status?.services?.["input-away-suspend"];
   const gamescopeRecovery = status?.services?.["gamescope-recovery"];
   const powerStandby = status?.system_services?.["power-standby"];
   const usbWake = status?.system_services?.["usb-wake"];
@@ -588,7 +588,7 @@ function Content() {
   const audioTarget = configValue(status, "CEC_AUDIO_LOGICAL_ADDRESS", discovered?.suggested?.CEC_AUDIO_LOGICAL_ADDRESS || "5");
   const audioCardName = configValue(status, "HDMI_ALSA_CARD_NAME", audioDiscovery?.suggested?.HDMI_ALSA_CARD_NAME || "alsa_card.pci-0000_03_00.1");
   const audioRoute = configValue(status, "EXTERNAL_VOLUME_ROUTE", audioDiscovery?.suggested?.EXTERNAL_VOLUME_ROUTE || "hdmi-output-0");
-  const inputAwayDelay = configValue(status, "INPUT_AWAY_SUSPEND_DELAY_SECONDS", "60");
+  const inputInactiveDelay = configValue(status, "INPUT_INACTIVE_SUSPEND_DELAY_SECONDS", "60");
   const audioCardOptions = (audioDiscovery?.cards || []).map((card) => ({
     data: card.name,
     label: card.label,
@@ -597,7 +597,7 @@ function Content() {
     data: route,
     label: route,
   }));
-  const inputAwayDelayOptions = [
+  const inputInactiveDelayOptions = [
     { data: "30", label: "30 seconds" },
     { data: "60", label: "1 minute" },
     { data: "120", label: "2 minutes" },
@@ -659,9 +659,9 @@ function Content() {
         </PanelSectionRow>
         <PanelSectionRow>
           <ToggleField
-            label="Input Away Suspends SteamOS"
+            label="Input Inactive Suspends SteamOS"
             description="Suspend SteamOS after this HDMI input is no longer active"
-            checked={!!inputAwaySuspend?.is_enabled}
+            checked={!!inputInactiveSuspend?.is_enabled}
             disabled={busy || !status?.input_away_suspend_script_exists}
             onChange={(enabled: boolean) => void runAction(() => setService("input-away-suspend", enabled))}
           />
@@ -754,15 +754,15 @@ function Content() {
             />
           </PanelSectionRow>
         )}
-        {inputAwaySuspend?.is_enabled && (
+        {inputInactiveSuspend?.is_enabled && (
           <PanelSectionRow>
             <DropdownItem
-              label="Input Away Delay"
+              label="Input Inactive Delay"
               description="How long to wait before suspending after this CEC source becomes inactive"
-              rgOptions={inputAwayDelayOptions}
-              selectedOption={inputAwayDelay}
+              rgOptions={inputInactiveDelayOptions}
+              selectedOption={inputInactiveDelay}
               disabled={busy}
-              onChange={(option) => void runAction(() => setConfig({ INPUT_AWAY_SUSPEND_DELAY_SECONDS: String(option.data) }))}
+              onChange={(option) => void runAction(() => setConfig({ INPUT_INACTIVE_SUSPEND_DELAY_SECONDS: String(option.data) }))}
             />
           </PanelSectionRow>
         )}

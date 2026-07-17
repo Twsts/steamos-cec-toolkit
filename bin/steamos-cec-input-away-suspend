@@ -42,9 +42,14 @@ CONFIG = read_config(os.environ.get("STEAMOS_CEC_CONFIG", DEFAULT_CONFIG))
 STEAMOS_CEC_USER = CONFIG.get("STEAMOS_CEC_USER", "deck")
 USER_CONFIG = f"/home/{STEAMOS_CEC_USER}/.config/steamos-cec-toolkit/config.conf"
 CONFIG.update(read_config(USER_CONFIG))
-INPUT_AWAY_SUSPEND_DELAY_SECONDS = max(
+INPUT_INACTIVE_SUSPEND_DELAY_SECONDS = max(
     5,
-    int(float(CONFIG.get("INPUT_AWAY_SUSPEND_DELAY_SECONDS", str(DEFAULT_DELAY_SECONDS)))),
+    int(float(
+        CONFIG.get(
+            "INPUT_INACTIVE_SUSPEND_DELAY_SECONDS",
+            CONFIG.get("INPUT_AWAY_SUSPEND_DELAY_SECONDS", str(DEFAULT_DELAY_SECONDS)),
+        )
+    )),
 )
 
 
@@ -57,7 +62,7 @@ def local_suspend_in_progress() -> bool:
 
 async def suspend() -> None:
     if local_suspend_in_progress():
-        LOG.info("Ignoring input-away suspend during local suspend/shutdown")
+        LOG.info("Ignoring input-inactive suspend during local suspend/shutdown")
         return
 
     process = await asyncio.create_subprocess_exec(
@@ -72,11 +77,11 @@ async def suspend() -> None:
 
 
 async def delayed_suspend(state: dict[str, object]) -> None:
-    delay = INPUT_AWAY_SUSPEND_DELAY_SECONDS
+    delay = INPUT_INACTIVE_SUSPEND_DELAY_SECONDS
     LOG.info("CEC source inactive; suspending SteamOS in %ss if input does not return", delay)
     await asyncio.sleep(delay)
     if state.get("active"):
-        LOG.info("CEC source became active again; input-away suspend cancelled")
+        LOG.info("CEC source became active again; input-inactive suspend cancelled")
         return
     LOG.info("CEC source still inactive after %ss; suspending SteamOS", delay)
     await suspend()
@@ -96,7 +101,7 @@ def cancel_suspend(state: dict[str, object]) -> None:
     task = state.get("task")
     if task is not None and not task.done():
         task.cancel()
-        LOG.info("CEC source active; input-away suspend cancelled")
+        LOG.info("CEC source active; input-inactive suspend cancelled")
     state["task"] = None
 
 
@@ -128,9 +133,9 @@ async def main() -> None:
 
     properties.on_properties_changed(properties_changed)
     LOG.info(
-        "Monitoring CEC source active state for input-away suspend; initial state=%s, delay=%ss",
+        "Monitoring CEC source active state for input-inactive suspend; initial state=%s, delay=%ss",
         state["active"],
-        INPUT_AWAY_SUSPEND_DELAY_SECONDS,
+        INPUT_INACTIVE_SUSPEND_DELAY_SECONDS,
     )
     await asyncio.get_running_loop().create_future()
 

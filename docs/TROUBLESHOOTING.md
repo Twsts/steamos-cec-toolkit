@@ -182,7 +182,7 @@ controllers may need a small code change.
 
 The Steam-button and ExternalVolume pieces do not need `dbus_next`.
 
-The optional TV standby, input-away suspend, and Gamescope recovery services use
+The optional TV standby, input inactive suspend, and Gamescope recovery services use
 `dbus_next`. If the module is missing, install it using your preferred
 SteamOS-safe Python packaging approach or leave those optional services disabled.
 
