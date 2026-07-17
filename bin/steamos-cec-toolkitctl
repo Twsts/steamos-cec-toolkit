@@ -185,6 +185,8 @@ def write_user_config(updates: dict[str, str]) -> None:
         "EXTERNAL_VOLUME_ROUTE",
         "CONTROLLER_WAKE_GENERIC_INPUT",
         "CONTROLLER_WAKE_STEAM_HID",
+        "INPUT_INACTIVE_SUSPEND_DELAY_SECONDS",
+        "INPUT_AWAY_SUSPEND_DELAY_SECONDS",
     }
     current = read_config()
     for key, value in updates.items():

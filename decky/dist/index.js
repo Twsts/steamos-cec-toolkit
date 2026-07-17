@@ -403,7 +403,7 @@ function Content() {
     const audioTarget = configValue(status, "CEC_AUDIO_LOGICAL_ADDRESS", discovered?.suggested?.CEC_AUDIO_LOGICAL_ADDRESS || "5");
     const audioCardName = configValue(status, "HDMI_ALSA_CARD_NAME", audioDiscovery?.suggested?.HDMI_ALSA_CARD_NAME || "alsa_card.pci-0000_03_00.1");
     const audioRoute = configValue(status, "EXTERNAL_VOLUME_ROUTE", audioDiscovery?.suggested?.EXTERNAL_VOLUME_ROUTE || "hdmi-output-0");
-    const inputInactiveDelay = configValue(status, "INPUT_INACTIVE_SUSPEND_DELAY_SECONDS", "60");
+    const inputInactiveDelay = configValue(status, "INPUT_INACTIVE_SUSPEND_DELAY_SECONDS", configValue(status, "INPUT_AWAY_SUSPEND_DELAY_SECONDS", "60"));
     const audioCardOptions = (audioDiscovery?.cards || []).map((card) => ({
         data: card.name,
         label: card.label,
