@@ -54,6 +54,8 @@ ExternalVolume plumbing.
 
 ## Install
 
+Recommended install path:
+
 Run this on the SteamOS machine as the normal desktop user, usually `deck`:
 
 ```bash
@@ -68,6 +70,12 @@ The installer will:
 - optionally install the Decky plugin
 - discover CEC devices where possible
 - restart Decky Loader if the plugin is installed
+
+This is the recommended path for most users. It installs the core toolkit,
+asks which features to enable, and can install the Decky plugin. A manual
+`git clone` + `./install.sh` install is supported, but it is an advanced path:
+it does not install the Decky plugin automatically, and optional features must
+be enabled with flags.
 
 If you install the Decky plugin, open Game Mode and use the `SteamOS CEC`
 plugin:
@@ -297,7 +305,18 @@ target:    5  (Audio System)
 
 Most users should use the one-command installer above.
 
-Manual install:
+## Manual Install
+
+Manual install is intended for development, testing, or users who do not want
+the release installer. It installs the same core toolkit files, but it skips the
+interactive feature prompts, release asset download, Decky plugin installation,
+and post-install discovery summary.
+
+Running `./install.sh` with no feature flags does not enable every feature. It
+installs the base toolkit and ExternalVolume integration, while services such as
+controller wake/input switching, boot wake, TV standby suspend, input inactive
+suspend, Gamescope recovery, sleep/shutdown TV standby, and USB wake must be
+enabled explicitly.
 
 Clone the repo on the SteamOS machine as the normal SteamOS desktop user:
 
