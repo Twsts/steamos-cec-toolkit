@@ -32,6 +32,8 @@ type Status = {
   debug_helper_exists?: boolean;
   power_standby_helper_exists?: boolean;
   usb_wake_helper_exists?: boolean;
+  resume_wake_helper_exists?: boolean;
+  resume_wake_unit_exists?: boolean;
   cec_permissions_helper_exists?: boolean;
   sudoers_exists?: boolean;
   boot_wake_script_exists?: boolean;
@@ -274,6 +276,7 @@ function DiagnosticsDetails({ status }: { status: Status | null }) {
       <div>Power standby helper: {yesNo(status.power_standby_helper_exists)}</div>
       <div>USB wake helper: {yesNo(status.usb_wake_helper_exists)}</div>
       <div>Boot wake helper: {yesNo(status.boot_wake_script_exists)}</div>
+      <div>Resume wake service: {status.resume_wake_helper_exists && status.resume_wake_unit_exists ? "OK" : "Missing"}</div>
       <div>CEC permissions: {status.cec_device?.readable && status.cec_device?.writable ? "OK" : "Needs repair"}</div>
       <div>Sudoers: {yesNo(status.sudoers_exists)}</div>
       <div>CEC volume buttons: {status.external_volume?.enabled ? "On" : "Off"}</div>
@@ -636,8 +639,8 @@ function Content() {
         </PanelSectionRow>
         <PanelSectionRow>
           <ToggleField
-            label="Controller Button Wakes TV"
-            description="Use controller Home/Guide buttons to wake the TV/AVR and select this input"
+            label="Input Switching"
+            description="Wake the TV/AVR and select this HDMI input from Home/Guide buttons and SteamOS resume"
             checked={!!steamButton?.is_enabled}
             disabled={busy || !status?.steam_button_script_exists}
             onChange={(enabled: boolean) => void runAction(() => setService("steam-button", enabled))}
@@ -682,7 +685,7 @@ function Content() {
         <PanelSectionRow>
           <ToggleField
             label="Bluetooth/Controller Wake"
-            description="Allow supported Bluetooth and controller receivers to wake SteamOS from suspend"
+            description="Allow supported USB and Bluetooth controller receivers to wake the PC from suspend"
             checked={!!usbWake?.is_enabled}
             disabled={busy || !status?.usb_wake_helper_exists}
             onChange={(enabled: boolean) => void runAction(() => setSystemService("usb-wake", enabled))}

@@ -1,0 +1,167 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+CONFIG_FILE="${STEAMOS_CEC_CONFIG:-/etc/steamos-cec-toolkit.conf}"
+if [[ -r "$CONFIG_FILE" ]]; then
+  # shellcheck disable=SC1090
+  source "$CONFIG_FILE"
+fi
+
+STEAMOS_CEC_USER="${STEAMOS_CEC_USER:-deck}"
+USER_CONFIG_FILE="/home/$STEAMOS_CEC_USER/.config/steamos-cec-toolkit/config.conf"
+if [[ -r "$USER_CONFIG_FILE" ]]; then
+  # shellcheck disable=SC1090
+  source "$USER_CONFIG_FILE"
+fi
+
+CEC_DEVICE="${CEC_DEVICE:-/dev/cec0}"
+TV_LOGICAL_ADDRESS="${TV_LOGICAL_ADDRESS:-0}"
+CEC_PLAYBACK_LOGICAL_ADDRESS="${CEC_PLAYBACK_LOGICAL_ADDRESS:-4}"
+CEC_PHYSICAL_ADDRESS="${CEC_PHYSICAL_ADDRESS:-}"
+CEC_RESUME_WAKE_DELAY_SECONDS="${CEC_RESUME_WAKE_DELAY_SECONDS:-3}"
+CEC_RESUME_WAKE_ATTEMPTS="${CEC_RESUME_WAKE_ATTEMPTS:-3}"
+CEC_RESUME_WAKE_RETRY_SECONDS="${CEC_RESUME_WAKE_RETRY_SECONDS:-4}"
+CEC_LOGICAL_ADDRESS_WAIT_SECONDS="${CEC_LOGICAL_ADDRESS_WAIT_SECONDS:-12}"
+CEC_DEVICE_WAIT_SECONDS="${CEC_DEVICE_WAIT_SECONDS:-12}"
+STEAM_BUTTON_UNIT="/home/$STEAMOS_CEC_USER/.config/systemd/user/default.target.wants/steamos-cec-steam-button.service"
+
+log() {
+  printf 'steamos-cec-resume-wake: %s\n' "$*"
+}
+
+positive_integer() {
+  local value="${1:-}" fallback="$2"
+  if [[ "$value" =~ ^[0-9]+$ ]] && [[ "$value" -gt 0 ]]; then
+    printf '%s\n' "$value"
+  else
+    printf '%s\n' "$fallback"
+  fi
+}
+
+non_negative_seconds() {
+  local value="${1:-}" fallback="$2"
+  if [[ "$value" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
+    printf '%s\n' "$value"
+  else
+    printf '%s\n' "$fallback"
+  fi
+}
+
+valid_logical_address() {
+  [[ "${1:-}" =~ ^[0-9]+$ ]] && [[ "$1" -ge 0 && "$1" -le 14 ]]
+}
+
+configured_logical_address() {
+  if valid_logical_address "$CEC_PLAYBACK_LOGICAL_ADDRESS"; then
+    printf '%s\n' "$CEC_PLAYBACK_LOGICAL_ADDRESS"
+  else
+    printf '4\n'
+  fi
+}
+
+controller_wake_enabled() {
+  [[ -e "$STEAM_BUTTON_UNIT" ]]
+}
+
+wait_for_cec_device() {
+  local deadline
+  deadline="$(( $(date +%s) + $(positive_integer "${CEC_DEVICE_WAIT_SECONDS%.*}" 12) ))"
+  while [[ "$(date +%s)" -lt "$deadline" ]]; do
+    if [[ -r "$CEC_DEVICE" && -w "$CEC_DEVICE" ]]; then
+      return 0
+    fi
+    sleep 0.5
+  done
+  [[ -r "$CEC_DEVICE" && -w "$CEC_DEVICE" ]]
+}
+
+read_logical_address() {
+  local output logical
+  output="$(/usr/bin/cec-ctl -d "$CEC_DEVICE" -l 2>/dev/null || true)"
+  logical="$(awk '/^[[:space:]]*[0-9]+[[:space:]]*$/ {print $1; exit}' <<<"$output")"
+  if valid_logical_address "$logical"; then
+    printf '%s\n' "$logical"
+    return 0
+  fi
+
+  output="$(/usr/bin/cec-ctl -d "$CEC_DEVICE" -S 2>/dev/null || true)"
+  logical="$(awk '/^[[:space:]]+Logical Address[[:space:]]+:/ {print $4; exit}' <<<"$output")"
+  if valid_logical_address "$logical"; then
+    printf '%s\n' "$logical"
+    return 0
+  fi
+
+  return 1
+}
+
+wait_for_logical_address() {
+  local deadline logical
+  deadline="$(( $(date +%s) + $(positive_integer "${CEC_LOGICAL_ADDRESS_WAIT_SECONDS%.*}" 12) ))"
+  while [[ "$(date +%s)" -lt "$deadline" ]]; do
+    logical="$(read_logical_address || true)"
+    if valid_logical_address "$logical"; then
+      printf '%s\n' "$logical"
+      return 0
+    fi
+    sleep 0.5
+  done
+
+  logical="$(configured_logical_address)"
+  log "CEC logical address is not allocated yet; using configured fallback $logical"
+  printf '%s\n' "$logical"
+}
+
+physical_address_payload() {
+  local physical="${CEC_PHYSICAL_ADDRESS,,}" a b c d
+  [[ "$physical" =~ ^[0-9a-f]\.[0-9a-f]\.[0-9a-f]\.[0-9a-f]$ ]] || return 1
+  [[ "$physical" != "f.f.f.f" ]] || return 1
+  IFS='.' read -r a b c d <<<"$physical"
+  printf '0x%02x:0x%02x\n' "$(( (16#$a << 4) | 16#$b ))" "$(( (16#$c << 4) | 16#$d ))"
+}
+
+send_raw() {
+  /usr/bin/cec-ctl -d "$CEC_DEVICE" -s --raw-msg "$@" || true
+}
+
+send_wake_attempt() {
+  local source="$1" payload
+  payload="$(physical_address_payload || true)"
+
+  log "sending wake/input activation from logical $source to TV $TV_LOGICAL_ADDRESS"
+  send_raw -f "$source" -t "$TV_LOGICAL_ADDRESS" --custom-command cmd=0x04
+  sleep 0.25
+  send_raw -f "$source" -t "$TV_LOGICAL_ADDRESS" --custom-command cmd=0x0d
+  sleep 0.25
+
+  if [[ -n "$payload" ]]; then
+    send_raw -f "$source" -t 15 --custom-command "cmd=0x82,payload=$payload"
+  else
+    log "CEC_PHYSICAL_ADDRESS is not configured; skipping ACTIVE_SOURCE"
+  fi
+}
+
+main() {
+  if ! controller_wake_enabled; then
+    log "controller wake/input switching is disabled; skipping resume wake"
+    return 0
+  fi
+
+  sleep "$(non_negative_seconds "$CEC_RESUME_WAKE_DELAY_SECONDS" 3)"
+
+  if ! wait_for_cec_device; then
+    log "$CEC_DEVICE is missing or not writable after waiting; skipping resume wake"
+    return 0
+  fi
+
+  local attempt source
+  for attempt in $(seq 1 "$(positive_integer "$CEC_RESUME_WAKE_ATTEMPTS" 3)"); do
+    source="$(wait_for_logical_address)"
+    send_wake_attempt "$source"
+    log "sent resume wake/input activation attempt $attempt"
+    if [[ "$attempt" -lt "$CEC_RESUME_WAKE_ATTEMPTS" ]]; then
+      sleep "$(non_negative_seconds "$CEC_RESUME_WAKE_RETRY_SECONDS" 4)"
+    fi
+  done
+}
+
+main "$@"

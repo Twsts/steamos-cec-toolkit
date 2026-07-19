@@ -1,0 +1,10 @@
+[Unit]
+Description=Wake TV and activate SteamOS HDMI-CEC source after resume
+After=suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target
+
+[Service]
+Type=oneshot
+ExecStart=/var/lib/steamos-cec-toolkit/steamos-cec-resume-wake
+
+[Install]
+WantedBy=suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target

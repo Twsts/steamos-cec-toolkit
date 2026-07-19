@@ -109,6 +109,11 @@ if src="$(source_file "bin/steamos-cec-before-sleep")"; then
     "$ROOT_HELPER_DIR/steamos-cec-before-sleep"
 fi
 
+if src="$(source_file "bin/steamos-cec-resume-wake")"; then
+  install -m 0755 "$src" \
+    "$ROOT_HELPER_DIR/steamos-cec-resume-wake"
+fi
+
 if src="$(source_file "bin/steamos-cec-usb-wake-apply")"; then
   install -m 0755 "$src" \
     "$ROOT_HELPER_DIR/steamos-cec-usb-wake-apply"
@@ -147,6 +152,18 @@ if src="$(source_file "systemd/system/steamos-cec-usb-wake.service")"; then
   install -m 0644 "$src" \
     /etc/systemd/system/steamos-cec-usb-wake.service
   systemctl daemon-reload
+fi
+
+if src="$(source_file "systemd/system/steamos-cec-resume-wake.service")"; then
+  install -m 0644 "$src" \
+    /etc/systemd/system/steamos-cec-resume-wake.service
+  rm -f /etc/systemd/system-sleep/steamos-cec-system-sleep
+  systemctl daemon-reload
+  if run_user_systemctl is-enabled --quiet steamos-cec-steam-button.service; then
+    systemctl enable steamos-cec-resume-wake.service
+  else
+    systemctl disable steamos-cec-resume-wake.service 2>/dev/null || true
+  fi
 fi
 
 {

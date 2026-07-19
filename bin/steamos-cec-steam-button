@@ -14,6 +14,7 @@ import subprocess
 import threading
 import time
 from dataclasses import dataclass
+from pathlib import Path
 
 try:
     from dbus_next import BusType
@@ -44,7 +45,10 @@ SHORT_PRESS_CONFIRM_SECONDS = 1.0
 SHORT_PRESS_CONFIRM_REPORTS = 20
 CEC_DEVICE_WAIT_SECONDS = 8.0
 CEC_DEVICE_WAIT_STEP_SECONDS = 0.5
+CEC_LOGICAL_ADDRESS_WAIT_SECONDS = 12.0
 CEC_WAKE_RETRY_DELAYS = (0, 2, 3, 5, 8)
+RUNTIME_DIR = Path(os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}"))
+CEC_ACTIVATION_MARKER = RUNTIME_DIR / "steamos-cec-activation-requested"
 
 INPUT_EVENT = struct.Struct("llHHI")
 EV_KEY = 0x01
@@ -277,7 +281,21 @@ def wait_for_cec_device() -> bool:
     return os.path.exists(CEC_DEVICE) and os.access(CEC_DEVICE, os.R_OK | os.W_OK)
 
 
-def current_playback_logical_address() -> str:
+def valid_source_logical_address(value: str) -> bool:
+    try:
+        logical = int(value, 10)
+    except ValueError:
+        return False
+    return 0 <= logical <= 14
+
+
+def configured_playback_logical_address() -> str:
+    if valid_source_logical_address(CEC_PLAYBACK_LOGICAL_ADDRESS):
+        return CEC_PLAYBACK_LOGICAL_ADDRESS
+    return "4"
+
+
+def read_current_playback_logical_address() -> str | None:
     for args, timeout in ((["-l"], 5), (["-L"], 5), (["-S"], 12)):
         try:
             result = subprocess.run(
@@ -293,12 +311,25 @@ def current_playback_logical_address() -> str:
         if result.returncode != 0:
             continue
         plain_match = re.search(r"^\s*(\d+)\s*$", result.stdout, re.MULTILINE)
-        if plain_match:
+        if plain_match and valid_source_logical_address(plain_match.group(1)):
             return plain_match.group(1)
         match = re.search(r"Logical Address\s*:\s*(\d+)\s*\(", result.stdout)
-        if match:
+        if match and valid_source_logical_address(match.group(1)):
             return match.group(1)
-    return CEC_PLAYBACK_LOGICAL_ADDRESS
+    return None
+
+
+def current_playback_logical_address() -> str:
+    deadline = time.monotonic() + CEC_LOGICAL_ADDRESS_WAIT_SECONDS
+    while time.monotonic() < deadline:
+        logical = read_current_playback_logical_address()
+        if logical is not None:
+            return logical
+        time.sleep(CEC_DEVICE_WAIT_STEP_SECONDS)
+
+    fallback = configured_playback_logical_address()
+    LOG.warning("CEC logical address is not allocated yet; using configured fallback %s", fallback)
+    return fallback
 
 
 def physical_address() -> str:
@@ -398,8 +429,16 @@ def source_is_active() -> bool:
     return result.returncode == 0 and result.stdout.strip() == "b true"
 
 
+def mark_cec_activation_requested(reason: str) -> None:
+    try:
+        CEC_ACTIVATION_MARKER.write_text(f"{time.monotonic()} {reason}\n", encoding="utf-8")
+    except OSError as error:
+        LOG.warning("Cannot write CEC activation marker: %s", error)
+
+
 def activate_source(reason: str) -> None:
     with ACTIVATION_LOCK:
+        mark_cec_activation_requested(reason)
         was_active = source_is_active()
         if was_active:
             LOG.info("CEC source reports active; still sending raw wake/input activation (%s)", reason)

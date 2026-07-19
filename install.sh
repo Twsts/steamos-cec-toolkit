@@ -163,6 +163,8 @@ sudo install -m 0755 "$PROJECT_DIR/bin/steamos-cec-permissions-apply" \
   /var/lib/steamos-cec-toolkit/steamos-cec-permissions-apply
 sudo install -m 0755 "$PROJECT_DIR/bin/steamos-cec-before-sleep" \
   /var/lib/steamos-cec-toolkit/steamos-cec-before-sleep
+sudo install -m 0755 "$PROJECT_DIR/bin/steamos-cec-resume-wake" \
+  /var/lib/steamos-cec-toolkit/steamos-cec-resume-wake
 sudo install -m 0755 "$PROJECT_DIR/bin/steamos-cec-usb-wake-apply" \
   /var/lib/steamos-cec-toolkit/steamos-cec-usb-wake-apply
 sudo install -m 0755 "$PROJECT_DIR/bin/steamos-cec-usb-wake-control" \
@@ -173,6 +175,8 @@ sudo install -D -m 0644 "$PROJECT_DIR/systemd/system/steamos-cec-permissions.ser
   /etc/systemd/system/steamos-cec-permissions.service
 sudo install -D -m 0644 "$PROJECT_DIR/systemd/system/steamos-cec-usb-wake.service" \
   /etc/systemd/system/steamos-cec-usb-wake.service
+sudo install -D -m 0644 "$PROJECT_DIR/systemd/system/steamos-cec-resume-wake.service" \
+  /etc/systemd/system/steamos-cec-resume-wake.service
 sudo install -D -m 0644 "$PROJECT_DIR/udev/70-steamos-cec-toolkit.rules" \
   /etc/udev/rules.d/70-steamos-cec-toolkit.rules
 sudo install -D -m 0644 "$PROJECT_DIR/config/atomic-update-steamos-cec-toolkit.conf" \
@@ -229,6 +233,7 @@ systemctl --user restart cecd.service 2>/dev/null || true
 
 if [[ "$enable_steam_button" -eq 1 ]]; then
   systemctl --user enable --now steamos-cec-steam-button.service
+  sudo systemctl enable steamos-cec-resume-wake.service
 fi
 if [[ "$enable_boot_wake" -eq 1 ]]; then
   systemctl --user enable steamos-cec-boot-wake.service

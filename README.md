@@ -178,6 +178,7 @@ Root files:
 /var/lib/steamos-cec-toolkit/steamos-cec-permissions-apply
 /var/lib/steamos-cec-toolkit/steamos-cec-usb-wake-apply
 /etc/systemd/system/steamos-cec-before-sleep.service
+/etc/systemd/system/steamos-cec-resume-wake.service
 /etc/systemd/system/steamos-cec-permissions.service
 /etc/systemd/system/steamos-cec-usb-wake.service
 /etc/udev/rules.d/70-steamos-cec-toolkit.rules
@@ -202,7 +203,7 @@ On SteamOS systems with atomic-update support, the installer also writes:
 ```
 
 This asks SteamOS to preserve the toolkit-managed `/etc` files across OS
-updates, including the systemd units, udev rule, sudoers rule, system sleep hook,
+updates, including the systemd units, udev rule, sudoers rule, root helpers,
 and toolkit config. It reduces update breakage for files managed by this
 project, but it cannot protect Decky Loader, SteamOS internals, WirePlumber
 behavior changes, or files outside the configured keep-list.
@@ -608,7 +609,7 @@ particular, some receivers accept volume only from the TV logical address while
 others may accept it from the SteamOS playback address. HDMI/WirePlumber card
 matching can also vary by GPU, adapter, and distro image.
 
-## Controller Wake and Input Switching
+## Input Switching
 
 The `steamos-cec-steam-button` service watches controller Home/Guide input
 events from gamepad-like Linux input devices. It also keeps the original Steam
@@ -628,6 +629,7 @@ It triggers on:
 - supported controller Home/Guide button events
 - original Steam Controller connect/resume
 - original Steam Controller short Steam-button press
+- SteamOS resume, through a root systemd service that runs after suspend
 
 On a working CEC topology this is the same behavior users expect from a console:
 press the controller button, the display wakes, the AVR/TV selects the SteamOS
@@ -722,9 +724,8 @@ Enable with:
 ./install.sh --enable-before-sleep
 ```
 
-This installs a system service and a `systemd/system-sleep` hook that ask
-`cecd` to send TV standby before SteamOS sleeps or shuts down. It can be toggled
-from the Decky plugin or with:
+This installs a system service that asks `cecd` to send TV standby before
+SteamOS sleeps or shuts down. It can be toggled from the Decky plugin or with:
 
 ```bash
 ~/.local/bin/steamos-cec-toolkitctl set-system-service power-standby on
@@ -770,6 +771,7 @@ journalctl --user -b -u steamos-cec-steam-button.service --no-pager
 journalctl --user -b -u steamos-cec-tv-standby-suspend.service --no-pager
 journalctl --user -b -u steamos-cec-gamescope-recovery.service --no-pager
 journalctl --user -b -u wireplumber.service --no-pager
+journalctl -b -u steamos-cec-resume-wake.service --no-pager
 ```
 
 ## Uninstall

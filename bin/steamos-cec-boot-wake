@@ -44,6 +44,7 @@ CEC_DEVICE = CONFIG.get("CEC_DEVICE", "/dev/cec0")
 TV_LOGICAL_ADDRESS = CONFIG.get("TV_LOGICAL_ADDRESS", "0")
 CEC_PLAYBACK_LOGICAL_ADDRESS = CONFIG.get("CEC_PLAYBACK_LOGICAL_ADDRESS", "4")
 CEC_PHYSICAL_ADDRESS = CONFIG.get("CEC_PHYSICAL_ADDRESS", "")
+CEC_LOGICAL_ADDRESS_WAIT_SECONDS = float(CONFIG.get("CEC_LOGICAL_ADDRESS_WAIT_SECONDS", "12"))
 
 
 def run_busctl(args: list[str], timeout: int = 8) -> subprocess.CompletedProcess[str]:
@@ -77,7 +78,21 @@ def cec_device_ready() -> bool:
     return os.path.exists(CEC_DEVICE) and os.access(CEC_DEVICE, os.R_OK | os.W_OK)
 
 
-def current_playback_logical_address() -> str:
+def valid_source_logical_address(value: str) -> bool:
+    try:
+        logical = int(value, 10)
+    except ValueError:
+        return False
+    return 0 <= logical <= 14
+
+
+def configured_playback_logical_address() -> str:
+    if valid_source_logical_address(CEC_PLAYBACK_LOGICAL_ADDRESS):
+        return CEC_PLAYBACK_LOGICAL_ADDRESS
+    return "4"
+
+
+def read_current_playback_logical_address() -> str | None:
     for args, timeout in ((["-l"], 5), (["-L"], 5), (["-S"], 12)):
         try:
             result = subprocess.run(
@@ -93,12 +108,25 @@ def current_playback_logical_address() -> str:
         if result.returncode != 0:
             continue
         plain_match = re.search(r"^\s*(\d+)\s*$", result.stdout, re.MULTILINE)
-        if plain_match:
+        if plain_match and valid_source_logical_address(plain_match.group(1)):
             return plain_match.group(1)
         match = re.search(r"Logical Address\s*:\s*(\d+)\s*\(", result.stdout)
-        if match:
+        if match and valid_source_logical_address(match.group(1)):
             return match.group(1)
-    return CEC_PLAYBACK_LOGICAL_ADDRESS
+    return None
+
+
+def current_playback_logical_address() -> str:
+    deadline = time.monotonic() + CEC_LOGICAL_ADDRESS_WAIT_SECONDS
+    while time.monotonic() < deadline:
+        logical = read_current_playback_logical_address()
+        if logical is not None:
+            return logical
+        time.sleep(0.5)
+
+    fallback = configured_playback_logical_address()
+    LOG.warning("CEC logical address is not allocated yet; using configured fallback %s", fallback)
+    return fallback
 
 
 def physical_address() -> str:

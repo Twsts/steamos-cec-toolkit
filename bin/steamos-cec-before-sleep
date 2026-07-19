@@ -34,10 +34,12 @@ current_playback_logical_address() {
     /usr/bin/cec-ctl -d "$CEC_DEVICE" -S 2>/dev/null |
       awk '/^[[:space:]]+Logical Address[[:space:]]+:/ {print $4; exit}'
   )"
-  if [[ "$logical" =~ ^[0-9]+$ ]]; then
+  if [[ "$logical" =~ ^[0-9]+$ && "$logical" -ge 0 && "$logical" -le 14 ]]; then
     printf '%s\n' "$logical"
-  else
+  elif [[ "$CEC_PLAYBACK_LOGICAL_ADDRESS" =~ ^[0-9]+$ && "$CEC_PLAYBACK_LOGICAL_ADDRESS" -ge 0 && "$CEC_PLAYBACK_LOGICAL_ADDRESS" -le 14 ]]; then
     printf '%s\n' "$CEC_PLAYBACK_LOGICAL_ADDRESS"
+  else
+    printf '4\n'
   fi
 }
 
@@ -65,6 +67,7 @@ input_inactive_suspend_in_progress() {
 
 if input_inactive_suspend_in_progress; then
   echo "steamos-cec: input-inactive suspend detected; skipping TV/AVR standby"
+  rm -f "$INPUT_INACTIVE_SUSPEND_MARKER"
   exit 0
 fi
 

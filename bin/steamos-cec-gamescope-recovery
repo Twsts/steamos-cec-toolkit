@@ -30,6 +30,7 @@ TV_POWER_POLL_SECONDS = 3.0
 TV_POWER_TIMEOUT_SECONDS = 2.0
 RUNTIME_DIR = Path(os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}"))
 COOLDOWN_FILE = RUNTIME_DIR / "steamos-cec-gamescope-recovery.last"
+CEC_ACTIVATION_MARKER = RUNTIME_DIR / "steamos-cec-activation-requested"
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 LOG = logging.getLogger("steamos-cec-gamescope-recovery")
@@ -73,6 +74,12 @@ CONNECTOR_POLL_SECONDS = float(
 CEC_DEVICE = CONFIG.get("CEC_DEVICE", "/dev/cec0")
 TV_LOGICAL_ADDRESS = CONFIG.get("TV_LOGICAL_ADDRESS", "0")
 RECOVER_ON_TV_POWER_ON = CONFIG.get("GAMESCOPE_RECOVER_ON_TV_POWER_ON", "1") not in {
+    "0",
+    "false",
+    "False",
+    "no",
+}
+RECOVER_ON_CEC_ACTIVATION = CONFIG.get("GAMESCOPE_RECOVER_ON_CEC_ACTIVATION", "1") not in {
     "0",
     "false",
     "False",
@@ -269,6 +276,36 @@ async def monitor_tv_power(state: dict[str, object]) -> None:
         previous = current
 
 
+async def monitor_cec_activation_marker(state: dict[str, object]) -> None:
+    if not RECOVER_ON_CEC_ACTIVATION:
+        LOG.info("CEC activation recovery disabled by config")
+        await asyncio.get_running_loop().create_future()
+
+    try:
+        previous_mtime = CEC_ACTIVATION_MARKER.stat().st_mtime
+    except OSError:
+        previous_mtime = 0.0
+
+    LOG.info("Monitoring CEC activation requests for Gamescope recovery")
+
+    while True:
+        await asyncio.sleep(CONNECTOR_POLL_SECONDS)
+        try:
+            current_mtime = CEC_ACTIVATION_MARKER.stat().st_mtime
+        except OSError:
+            current_mtime = 0.0
+
+        if current_mtime <= previous_mtime:
+            continue
+
+        previous_mtime = current_mtime
+        if not state.get("active"):
+            LOG.info("CEC activation requested while source is not active yet; waiting for active state")
+            continue
+
+        schedule_recovery(state, "CEC activation requested")
+
+
 async def monitor_sleep(state: dict[str, object]) -> None:
     if not RECOVER_AFTER_RESUME:
         LOG.info("Resume recovery disabled by config")
@@ -311,6 +348,7 @@ async def main() -> None:
             monitor_cec(state),
             monitor_connector(state),
             monitor_tv_power(state),
+            monitor_cec_activation_marker(state),
             monitor_sleep(state),
         )
 

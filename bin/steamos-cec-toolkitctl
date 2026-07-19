@@ -22,6 +22,8 @@ DEBUG_HELPER = Path("/var/lib/steamos-cec-toolkit/steamos-cec-debug-monitor")
 POWER_STANDBY_HELPER = Path("/var/lib/steamos-cec-toolkit/steamos-cec-power-standby-control")
 USB_WAKE_HELPER = Path("/var/lib/steamos-cec-toolkit/steamos-cec-usb-wake-control")
 CEC_PERMISSIONS_HELPER = Path("/var/lib/steamos-cec-toolkit/steamos-cec-permissions-apply")
+RESUME_WAKE_HELPER = Path("/var/lib/steamos-cec-toolkit/steamos-cec-resume-wake")
+RESUME_WAKE_UNIT = Path("/etc/systemd/system/steamos-cec-resume-wake.service")
 SUDOERS_FILE = Path("/etc/sudoers.d/zz-steamos-cec-toolkit-volume")
 INSTALLED_VERSION_FILE = Path.home() / ".local/share/steamos-cec-toolkit/VERSION"
 SOURCE_VERSION_FILE = Path(__file__).resolve().parent.parent / "VERSION"
@@ -705,6 +707,8 @@ def status() -> dict[str, Any]:
         "power_standby_helper_exists": POWER_STANDBY_HELPER.exists(),
         "usb_wake_helper_exists": USB_WAKE_HELPER.exists(),
         "cec_permissions_helper_exists": CEC_PERMISSIONS_HELPER.exists(),
+        "resume_wake_helper_exists": RESUME_WAKE_HELPER.exists(),
+        "resume_wake_unit_exists": RESUME_WAKE_UNIT.exists(),
         "sudoers_exists": SUDOERS_FILE.exists(),
         "cec_device": cec_device_state(config),
         "external_volume_script_exists": EXTERNAL_VOLUME_SCRIPT.exists(),
