@@ -43,12 +43,17 @@ ExternalVolume plumbing.
 
 <table>
   <tr>
-    <td><img src="assets/screenshots/steamui-relative-volume-v012.png" alt="SteamOS Quick Settings showing relative TV volume plus and minus buttons" /></td>
-    <td><img src="assets/screenshots/decky-status-features-v014.png" alt="SteamOS CEC Decky plugin status and feature toggles" /></td>
+    <td><img src="assets/screenshots/decky-features-v023.png" alt="SteamOS CEC Decky plugin feature toggles" width="280" /></td>
+    <td><img src="assets/screenshots/decky-actions-v023.png" alt="SteamOS CEC Decky plugin actions" width="280" /></td>
+    <td><img src="assets/screenshots/decky-configuration-v023.png" alt="SteamOS CEC Decky plugin controller, CEC, and audio configuration" width="280" /></td>
   </tr>
   <tr>
-    <td><img src="assets/screenshots/decky-actions-configuration-v014.png" alt="SteamOS CEC Decky plugin actions and controller configuration" /></td>
-    <td><img src="assets/screenshots/decky-configuration-debug-v014.png" alt="SteamOS CEC Decky plugin CEC configuration and debug status" /></td>
+    <td><img src="assets/screenshots/decky-debug-v023.png" alt="SteamOS CEC Decky plugin debug status and CEC message capture" width="280" /></td>
+    <td><img src="assets/screenshots/steamui-relative-volume-v023.png" alt="SteamOS Quick Settings showing relative TV volume plus and minus buttons" width="280" /></td>
+    <td></td>
+  </tr>
+  <tr>
+    <td colspan="3"><img src="assets/screenshots/steamos-audio-settings-v023.png" alt="SteamOS Audio settings showing TV Volume relative controls and HDMI CEC control" width="900" /></td>
   </tr>
 </table>
 
