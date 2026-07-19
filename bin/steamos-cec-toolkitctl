@@ -28,7 +28,6 @@ SOURCE_VERSION_FILE = Path(__file__).resolve().parent.parent / "VERSION"
 EXTERNAL_VOLUME_SCRIPT = Path.home() / ".local/bin/steamos-cec-external-volume"
 VOLUME_SCRIPT = Path.home() / ".local/bin/steamos-cec-volume"
 BOOT_WAKE_SCRIPT = Path.home() / ".local/bin/steamos-cec-boot-wake"
-RESUME_WAKE_SCRIPT = Path.home() / ".local/bin/steamos-cec-resume-wake"
 STEAM_BUTTON_SCRIPT = Path.home() / ".local/bin/steamos-cec-steam-button"
 TV_STANDBY_SCRIPT = Path.home() / ".local/bin/steamos-cec-tv-standby-suspend"
 INPUT_AWAY_SUSPEND_SCRIPT = Path.home() / ".local/bin/steamos-cec-input-away-suspend"
@@ -92,7 +91,6 @@ wireplumber.settings {
 
 USER_SERVICES = {
     "boot-wake": "steamos-cec-boot-wake.service",
-    "resume-wake": "steamos-cec-resume-wake.service",
     "steam-button": "steamos-cec-steam-button.service",
     "tv-standby": "steamos-cec-tv-standby-suspend.service",
     "input-away-suspend": "steamos-cec-input-away-suspend.service",
@@ -187,10 +185,6 @@ def write_user_config(updates: dict[str, str]) -> None:
         "EXTERNAL_VOLUME_ROUTE",
         "CONTROLLER_WAKE_GENERIC_INPUT",
         "CONTROLLER_WAKE_STEAM_HID",
-        "RESUME_WAKE_ATTEMPTS",
-        "RESUME_WAKE_DELAY_SECONDS",
-        "RESUME_WAKE_RETRY_SECONDS",
-        "RESUME_WAKE_SET_ACTIVE_DELAY_SECONDS",
         "INPUT_INACTIVE_SUSPEND_DELAY_SECONDS",
         "INPUT_AWAY_SUSPEND_DELAY_SECONDS",
     }
@@ -716,7 +710,6 @@ def status() -> dict[str, Any]:
         "external_volume_script_exists": EXTERNAL_VOLUME_SCRIPT.exists(),
         "volume_script_exists": VOLUME_SCRIPT.exists(),
         "boot_wake_script_exists": BOOT_WAKE_SCRIPT.exists(),
-        "resume_wake_script_exists": RESUME_WAKE_SCRIPT.exists(),
         "steam_button_script_exists": STEAM_BUTTON_SCRIPT.exists(),
         "tv_standby_script_exists": TV_STANDBY_SCRIPT.exists(),
         "input_away_suspend_script_exists": INPUT_AWAY_SUSPEND_SCRIPT.exists(),
@@ -741,31 +734,10 @@ def status() -> dict[str, Any]:
 def set_service(name: str, enabled: bool) -> dict[str, Any]:
     if name not in USER_SERVICES:
         return {"ok": False, "error": f"Unknown service: {name}"}
-    if name == "steam-button":
-        if enabled:
-            result = systemctl_user("enable", "--now", USER_SERVICES["steam-button"])
-            resume_result = systemctl_user("enable", "--now", USER_SERVICES["resume-wake"])
-        else:
-            result = systemctl_user("disable", "--now", USER_SERVICES["steam-button"])
-            resume_result = systemctl_user("disable", "--now", USER_SERVICES["resume-wake"])
-        payload = status()
-        payload["action"] = {
-            "ok": result["ok"] and resume_result["ok"],
-            "returncode": result["returncode"] or resume_result["returncode"],
-            "stdout": "\n".join(
-                output for output in (result["stdout"], resume_result["stdout"]) if output
-            ),
-        }
-        if not payload["action"]["ok"]:
-            payload["ok"] = False
-            payload["error"] = payload["action"]["stdout"] or "Controller wake/input toggle failed"
-        return payload
     unit = USER_SERVICES[name]
     action = "enable" if enabled else "disable"
-    if name == "boot-wake" and enabled:
-        result = systemctl_user(action, unit)
-    else:
-        result = systemctl_user(action, "--now", unit)
+    state = "--now"
+    result = systemctl_user(action, state, unit)
     payload = status()
     payload["action"] = result
     if not result["ok"]:

@@ -30,6 +30,7 @@ EXTERNAL_VOLUME_ROUTE=hdmi-output-0
 # Steam HID support keeps the original Steam Controller fallback below.
 CONTROLLER_WAKE_GENERIC_INPUT=1
 CONTROLLER_WAKE_STEAM_HID=1
+CONTROLLER_WAKE_RESUME_DELAY_SECONDS=2
 STEAM_BUTTON_HID_ID=0003:000028DE:00001304
 STEAM_BUTTON_EXCLUDED_PHYS=input6
 STEAM_BUTTON_REPORT_ID=0x45
@@ -39,14 +40,6 @@ STEAM_BUTTON_ALT_REPORT_ID=0x44
 STEAM_BUTTON_ALT_BYTE=1
 STEAM_BUTTON_ALT_VALUES="0x03,0x04"
 STEAM_BUTTON_ALT_DEBOUNCE_SECONDS=20
-
-# Optional resume source activation.
-# This runs after SteamOS wakes from suspend, regardless of which controller,
-# keyboard, mouse, or power button woke the machine.
-RESUME_WAKE_DELAY_SECONDS=3
-RESUME_WAKE_SET_ACTIVE_DELAY_SECONDS=2
-RESUME_WAKE_ATTEMPTS=3
-RESUME_WAKE_RETRY_SECONDS=4
 
 # Optional boot/session-start source activation.
 # The boot wake service waits briefly for SteamOS/cecd to settle, then sends

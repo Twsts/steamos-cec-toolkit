@@ -542,6 +542,8 @@ def update_system_resume_window(
 
 
 def main() -> None:
+    start_resume_monitor()
+
     selector = selectors.DefaultSelector()
     open_devices: dict[str, int] = {}
     device_kinds: dict[str, str] = {}

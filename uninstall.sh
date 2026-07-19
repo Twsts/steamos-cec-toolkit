@@ -11,15 +11,11 @@ elif [[ $# -gt 0 ]]; then
 fi
 
 systemctl --user disable --now steamos-cec-steam-button.service 2>/dev/null || true
-systemctl --user disable --now steamos-cec-boot-wake.service 2>/dev/null || true
-systemctl --user disable --now steamos-cec-resume-wake.service 2>/dev/null || true
 systemctl --user disable --now steamos-cec-tv-standby-suspend.service 2>/dev/null || true
 systemctl --user disable --now steamos-cec-input-away-suspend.service 2>/dev/null || true
 systemctl --user disable --now steamos-cec-gamescope-recovery.service 2>/dev/null || true
 
 rm -f "$HOME/.config/systemd/user/steamos-cec-steam-button.service"
-rm -f "$HOME/.config/systemd/user/steamos-cec-boot-wake.service"
-rm -f "$HOME/.config/systemd/user/steamos-cec-resume-wake.service"
 rm -f "$HOME/.config/systemd/user/steamos-cec-tv-standby-suspend.service"
 rm -f "$HOME/.config/systemd/user/steamos-cec-input-away-suspend.service"
 rm -f "$HOME/.config/systemd/user/steamos-cec-gamescope-recovery.service"
@@ -28,8 +24,6 @@ rm -f "$HOME/.config/wireplumber/wireplumber.conf.d/99-steamos-cec-external-volu
 rm -f "$HOME/.local/bin/steamos-cec-volume"
 rm -f "$HOME/.local/bin/steamos-cec-toolkitctl"
 rm -f "$HOME/.local/bin/steamos-cec-external-volume"
-rm -f "$HOME/.local/bin/steamos-cec-boot-wake"
-rm -f "$HOME/.local/bin/steamos-cec-resume-wake"
 rm -f "$HOME/.local/bin/steamos-cec-steam-button"
 rm -f "$HOME/.local/bin/steamos-cec-tv-standby-suspend"
 rm -f "$HOME/.local/bin/steamos-cec-input-away-suspend"

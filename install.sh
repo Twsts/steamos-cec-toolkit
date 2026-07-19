@@ -129,7 +129,6 @@ install -m 0755 "$PROJECT_DIR/bin/steamos-cec-volume" "$HOME/.local/bin/steamos-
 install -m 0755 "$PROJECT_DIR/bin/steamos-cec-toolkitctl" "$HOME/.local/bin/steamos-cec-toolkitctl"
 install -m 0755 "$PROJECT_DIR/bin/steamos-cec-external-volume" "$HOME/.local/bin/steamos-cec-external-volume"
 install -m 0755 "$PROJECT_DIR/bin/steamos-cec-boot-wake" "$HOME/.local/bin/steamos-cec-boot-wake"
-install -m 0755 "$PROJECT_DIR/bin/steamos-cec-resume-wake" "$HOME/.local/bin/steamos-cec-resume-wake"
 install -m 0755 "$PROJECT_DIR/bin/steamos-cec-steam-button" "$HOME/.local/bin/steamos-cec-steam-button"
 install -m 0755 "$PROJECT_DIR/bin/steamos-cec-tv-standby-suspend" \
   "$HOME/.local/bin/steamos-cec-tv-standby-suspend"
@@ -207,8 +206,6 @@ install -m 0644 "$PROJECT_DIR/systemd/user/steamos-cec-steam-button.service" \
   "$HOME/.config/systemd/user/steamos-cec-steam-button.service"
 install -m 0644 "$PROJECT_DIR/systemd/user/steamos-cec-boot-wake.service" \
   "$HOME/.config/systemd/user/steamos-cec-boot-wake.service"
-install -m 0644 "$PROJECT_DIR/systemd/user/steamos-cec-resume-wake.service" \
-  "$HOME/.config/systemd/user/steamos-cec-resume-wake.service"
 install -m 0644 "$PROJECT_DIR/systemd/user/steamos-cec-tv-standby-suspend.service" \
   "$HOME/.config/systemd/user/steamos-cec-tv-standby-suspend.service"
 install -m 0644 "$PROJECT_DIR/systemd/user/steamos-cec-input-away-suspend.service" \
@@ -232,7 +229,6 @@ systemctl --user restart cecd.service 2>/dev/null || true
 
 if [[ "$enable_steam_button" -eq 1 ]]; then
   systemctl --user enable --now steamos-cec-steam-button.service
-  systemctl --user enable --now steamos-cec-resume-wake.service
 fi
 if [[ "$enable_boot_wake" -eq 1 ]]; then
   systemctl --user enable steamos-cec-boot-wake.service
