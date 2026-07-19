@@ -438,7 +438,6 @@ def mark_cec_activation_requested(reason: str) -> None:
 
 def activate_source(reason: str) -> None:
     with ACTIVATION_LOCK:
-        mark_cec_activation_requested(reason)
         was_active = source_is_active()
         if was_active:
             LOG.info("CEC source reports active; still sending raw wake/input activation (%s)", reason)
@@ -459,6 +458,8 @@ def activate_source(reason: str) -> None:
             raw_active_source()
             time.sleep(0.5)
             if source_is_active():
+                if not was_active:
+                    mark_cec_activation_requested(reason)
                 LOG.info("Woke display chain and activated HDMI source (%s, attempt %d)", reason, attempt)
                 return
             LOG.info("CEC wake attempt %d did not activate this source", attempt)
