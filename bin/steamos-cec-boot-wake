@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import subprocess
 import time
 
@@ -67,6 +68,39 @@ def raw_cec(command: list[str]) -> subprocess.CompletedProcess[str]:
     )
 
 
+def cec_device_ready() -> bool:
+    deadline = time.monotonic() + 8.0
+    while time.monotonic() < deadline:
+        if os.path.exists(CEC_DEVICE) and os.access(CEC_DEVICE, os.R_OK | os.W_OK):
+            return True
+        time.sleep(0.5)
+    return os.path.exists(CEC_DEVICE) and os.access(CEC_DEVICE, os.R_OK | os.W_OK)
+
+
+def current_playback_logical_address() -> str:
+    for args, timeout in ((["-l"], 5), (["-L"], 5), (["-S"], 12)):
+        try:
+            result = subprocess.run(
+                ["cec-ctl", "-d", CEC_DEVICE, *args],
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                timeout=timeout,
+                check=False,
+            )
+        except Exception:
+            continue
+        if result.returncode != 0:
+            continue
+        plain_match = re.search(r"^\s*(\d+)\s*$", result.stdout, re.MULTILINE)
+        if plain_match:
+            return plain_match.group(1)
+        match = re.search(r"Logical Address\s*:\s*(\d+)\s*\(", result.stdout)
+        if match:
+            return match.group(1)
+    return CEC_PLAYBACK_LOGICAL_ADDRESS
+
+
 def physical_address() -> str:
     return CEC_PHYSICAL_ADDRESS
 
@@ -85,19 +119,26 @@ def physical_address_payload() -> str | None:
 
 
 def raw_wake() -> None:
-    if not os.path.exists(CEC_DEVICE):
-        LOG.warning("CEC device %s is missing; cannot send raw wake", CEC_DEVICE)
+    if not cec_device_ready():
+        LOG.warning("CEC device %s is missing or not writable after waiting; cannot send raw wake", CEC_DEVICE)
         return
 
+    playback_logical_address = current_playback_logical_address()
+    if playback_logical_address != CEC_PLAYBACK_LOGICAL_ADDRESS:
+        LOG.info(
+            "Using current CEC logical address %s instead of configured %s",
+            playback_logical_address,
+            CEC_PLAYBACK_LOGICAL_ADDRESS,
+        )
     commands = [
-        ["-f", CEC_PLAYBACK_LOGICAL_ADDRESS, "-t", TV_LOGICAL_ADDRESS, "--custom-command", "cmd=0x04"],
-        ["-f", CEC_PLAYBACK_LOGICAL_ADDRESS, "-t", TV_LOGICAL_ADDRESS, "--custom-command", "cmd=0x0d"],
+        ["-f", playback_logical_address, "-t", TV_LOGICAL_ADDRESS, "--custom-command", "cmd=0x04"],
+        ["-f", playback_logical_address, "-t", TV_LOGICAL_ADDRESS, "--custom-command", "cmd=0x0d"],
     ]
     active_source_payload = physical_address_payload()
     if active_source_payload:
         commands.append([
             "-f",
-            CEC_PLAYBACK_LOGICAL_ADDRESS,
+            playback_logical_address,
             "-t",
             "15",
             "--custom-command",

@@ -7,6 +7,7 @@ import glob
 import asyncio
 import logging
 import os
+import re
 import selectors
 import struct
 import subprocess
@@ -270,10 +271,34 @@ def raw_cec(command: list[str]) -> subprocess.CompletedProcess[str]:
 def wait_for_cec_device() -> bool:
     deadline = time.monotonic() + CEC_DEVICE_WAIT_SECONDS
     while time.monotonic() < deadline:
-        if os.path.exists(CEC_DEVICE):
+        if os.path.exists(CEC_DEVICE) and os.access(CEC_DEVICE, os.R_OK | os.W_OK):
             return True
         time.sleep(CEC_DEVICE_WAIT_STEP_SECONDS)
-    return os.path.exists(CEC_DEVICE)
+    return os.path.exists(CEC_DEVICE) and os.access(CEC_DEVICE, os.R_OK | os.W_OK)
+
+
+def current_playback_logical_address() -> str:
+    for args, timeout in ((["-l"], 5), (["-L"], 5), (["-S"], 12)):
+        try:
+            result = subprocess.run(
+                ["cec-ctl", "-d", CEC_DEVICE, *args],
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                timeout=timeout,
+                check=False,
+            )
+        except Exception:
+            continue
+        if result.returncode != 0:
+            continue
+        plain_match = re.search(r"^\s*(\d+)\s*$", result.stdout, re.MULTILINE)
+        if plain_match:
+            return plain_match.group(1)
+        match = re.search(r"Logical Address\s*:\s*(\d+)\s*\(", result.stdout)
+        if match:
+            return match.group(1)
+    return CEC_PLAYBACK_LOGICAL_ADDRESS
 
 
 def physical_address() -> str:
@@ -295,7 +320,7 @@ def physical_address_payload() -> str | None:
 
 def raw_active_source() -> None:
     if not wait_for_cec_device():
-        LOG.warning("CEC device %s is missing after waiting; cannot send ACTIVE_SOURCE", CEC_DEVICE)
+        LOG.warning("CEC device %s is missing or not writable after waiting; cannot send ACTIVE_SOURCE", CEC_DEVICE)
         return
 
     active_source_payload = physical_address_payload()
@@ -305,7 +330,7 @@ def raw_active_source() -> None:
 
     result = raw_cec([
         "-f",
-        CEC_PLAYBACK_LOGICAL_ADDRESS,
+        current_playback_logical_address(),
         "-t",
         "15",
         "--custom-command",
@@ -317,13 +342,20 @@ def raw_active_source() -> None:
 
 def raw_wake() -> None:
     if not wait_for_cec_device():
-        LOG.warning("CEC device %s is missing after waiting; cannot send raw wake", CEC_DEVICE)
+        LOG.warning("CEC device %s is missing or not writable after waiting; cannot send raw wake", CEC_DEVICE)
         return
 
+    playback_logical_address = current_playback_logical_address()
+    if playback_logical_address != CEC_PLAYBACK_LOGICAL_ADDRESS:
+        LOG.info(
+            "Using current CEC logical address %s instead of configured %s",
+            playback_logical_address,
+            CEC_PLAYBACK_LOGICAL_ADDRESS,
+        )
     commands = [
         [
             "-f",
-            CEC_PLAYBACK_LOGICAL_ADDRESS,
+            playback_logical_address,
             "-t",
             TV_LOGICAL_ADDRESS,
             "--custom-command",
@@ -331,7 +363,7 @@ def raw_wake() -> None:
         ],
         [
             "-f",
-            CEC_PLAYBACK_LOGICAL_ADDRESS,
+            playback_logical_address,
             "-t",
             TV_LOGICAL_ADDRESS,
             "--custom-command",

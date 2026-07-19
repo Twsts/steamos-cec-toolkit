@@ -804,9 +804,25 @@ def physical_address_payload(config: dict[str, str]) -> str:
     return f"0x{(parts[0] << 4) | parts[1]:02x}:0x{(parts[2] << 4) | parts[3]:02x}"
 
 
+def current_playback_logical_address(config: dict[str, str]) -> str:
+    cec_device = config.get("CEC_DEVICE", "/dev/cec0")
+    fallback = config.get("CEC_PLAYBACK_LOGICAL_ADDRESS", "4")
+    for args, timeout in ((["-l"], 5), (["-L"], 5), (["-S"], 12)):
+        result = run(["cec-ctl", "-d", cec_device, *args], timeout=timeout)
+        if not result["ok"]:
+            continue
+        plain_match = re.search(r"^\s*(\d+)\s*$", result["stdout"], re.MULTILINE)
+        if plain_match:
+            return plain_match.group(1)
+        match = re.search(r"Logical Address\s*:\s*(\d+)\s*\(", result["stdout"])
+        if match:
+            return match.group(1)
+    return fallback
+
+
 def raw_wake(config: dict[str, str]) -> list[dict[str, Any]]:
     cec_device = config.get("CEC_DEVICE", "/dev/cec0")
-    playback = config.get("CEC_PLAYBACK_LOGICAL_ADDRESS", "4")
+    playback = current_playback_logical_address(config)
     tv = config.get("TV_LOGICAL_ADDRESS", "0")
     commands = [
         ["cec-ctl", "-d", cec_device, "-s", "--raw-msg", "-f", playback, "-t", tv, "--custom-command", "cmd=0x04"],
