@@ -93,6 +93,17 @@ require_command() {
   fi
 }
 
+restart_system_service_best_effort() {
+  local unit="$1"
+  local timeout_seconds="${2:-20}"
+
+  if command -v timeout >/dev/null 2>&1; then
+    sudo timeout "$timeout_seconds" systemctl restart "$unit"
+  else
+    sudo systemctl restart "$unit"
+  fi
+}
+
 if [[ "$(id -u)" -eq 0 ]]; then
   echo "Run this installer as the SteamOS desktop user, usually 'deck', not as root." >&2
   exit 1
@@ -225,22 +236,32 @@ step "Installing CEC toolkit"
 
 if [[ "$install_decky" -eq 1 ]]; then
   step "Installing Decky plugin"
+  say "Preparing Decky plugin directory"
   sudo install -d -m 0755 "$PLUGIN_DIR"
   sudo rm -rf "$PLUGIN_DIR/$PLUGIN_NAME"
 
   if [[ -n "$DECKY_PLUGIN_ZIP_URL" ]]; then
+    say "Downloading Decky plugin package"
     curl -fL "$DECKY_PLUGIN_ZIP_URL" -o "$WORKDIR/steamos-cec-toolkit-decky.zip"
+    say "Extracting Decky plugin"
     sudo unzip -o "$WORKDIR/steamos-cec-toolkit-decky.zip" -d "$PLUGIN_DIR"
   else
+    say "Copying Decky plugin from local checkout"
     sudo install -d -m 0755 "$PLUGIN_DIR/$PLUGIN_NAME"
     sudo cp -a decky/plugin.json decky/package.json decky/main.py decky/dist "$PLUGIN_DIR/$PLUGIN_NAME/"
   fi
 
+  say "Setting Decky plugin permissions"
   sudo chown -R root:root "$PLUGIN_DIR/$PLUGIN_NAME"
   sudo chmod -R a+rX "$PLUGIN_DIR/$PLUGIN_NAME"
 
   if systemctl list-unit-files plugin_loader.service >/dev/null 2>&1; then
-    sudo systemctl restart plugin_loader.service
+    say "Restarting Decky Loader"
+    if restart_system_service_best_effort plugin_loader.service 20; then
+      say "Decky Loader restarted"
+    else
+      say "Decky Loader restart did not complete. The plugin was installed; restart Steam or reboot if it does not appear."
+    fi
   fi
 else
   step "Skipping Decky plugin"
