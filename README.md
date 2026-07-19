@@ -676,6 +676,10 @@ On the reference setup, suspend wake plus CEC TV/input activation has been
 tested with DualSense, DualShock 4, Steam Controller, and 8BitDo controllers.
 This depends on the Bluetooth/USB adapter being allowed to wake the machine from
 suspend, so unsupported adapters may still need platform-specific tuning.
+On some desktop AMD systems, a controller can wake the PC electrically while the
+OS resumes only partially. If the machine responds to ping but has no display
+and no SSH after Bluetooth wake, check BIOS power-management settings such as
+`Power Supply Idle Control` and `Global C-state Control`.
 
 ## Optional TV Standby Suspend
 

@@ -69,6 +69,17 @@ require_command() {
   fi
 }
 
+systemctl_user_timeout() {
+  local timeout_seconds="$1"
+  shift
+
+  if command -v timeout >/dev/null 2>&1; then
+    timeout "$timeout_seconds" systemctl --user "$@"
+  else
+    systemctl --user "$@"
+  fi
+}
+
 verify_atomic_update_persistence() {
   local holo_sync="/usr/lib/holo/holo-sync-var"
 
@@ -267,10 +278,13 @@ fi
 
 if [[ "$restart_services" -eq 1 ]]; then
   if [[ "$enable_external_volume" -eq 1 ]]; then
-    echo "Restarting audio services"
+    echo "Restarting CEC audio socket"
     systemctl --user stop cec-audio-control.service 2>/dev/null || true
     systemctl --user start cec-audio-control.socket 2>/dev/null || true
-    systemctl --user restart wireplumber.service
+    echo "Restarting WirePlumber audio session"
+    if ! systemctl_user_timeout 20 restart wireplumber.service; then
+      echo "warning: WirePlumber restart did not complete. Reboot if SteamOS volume buttons do not update." >&2
+    fi
   fi
 fi
 

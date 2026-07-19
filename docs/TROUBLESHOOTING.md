@@ -178,6 +178,21 @@ devices and supported Home/Guide button events.
 The included parser is known to target the original Steam Controller. Other
 controllers may need a small code change.
 
+## Bluetooth Wake Resumes to No Display or No SSH
+
+If Bluetooth/controller wake powers the PC but SteamOS does not fully resume,
+this is usually below the CEC layer. A common symptom is that the machine still
+responds to ping, but Game Mode never appears and SSH does not answer.
+
+Check BIOS/firmware power-management settings. On one AMD desktop reference
+build with an internal Intel Bluetooth adapter, setting `Power Supply Idle
+Control` to `Typical Current Idle` and disabling `Global C-state Control`
+stabilized Bluetooth controller wake from suspend.
+
+Keep `Bluetooth/Controller Wake` disabled while testing BIOS changes. Once
+manual sleep/resume is stable, enable only that feature and test controller wake
+before enabling CEC input switching or TV standby features.
+
 ## `dbus_next` Missing
 
 The Steam-button and ExternalVolume pieces do not need `dbus_next`.

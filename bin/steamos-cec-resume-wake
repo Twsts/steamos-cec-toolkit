@@ -21,9 +21,12 @@ CEC_PHYSICAL_ADDRESS="${CEC_PHYSICAL_ADDRESS:-}"
 CEC_RESUME_WAKE_DELAY_SECONDS="${CEC_RESUME_WAKE_DELAY_SECONDS:-3}"
 CEC_RESUME_WAKE_ATTEMPTS="${CEC_RESUME_WAKE_ATTEMPTS:-3}"
 CEC_RESUME_WAKE_RETRY_SECONDS="${CEC_RESUME_WAKE_RETRY_SECONDS:-4}"
+CEC_RESUME_CECD_SETTLE_SECONDS="${CEC_RESUME_CECD_SETTLE_SECONDS:-3}"
+CEC_RESUME_RESTART_CECD="${CEC_RESUME_RESTART_CECD:-1}"
 CEC_LOGICAL_ADDRESS_WAIT_SECONDS="${CEC_LOGICAL_ADDRESS_WAIT_SECONDS:-12}"
 CEC_DEVICE_WAIT_SECONDS="${CEC_DEVICE_WAIT_SECONDS:-12}"
 STEAM_BUTTON_UNIT="/home/$STEAMOS_CEC_USER/.config/systemd/user/default.target.wants/steamos-cec-steam-button.service"
+STEAMOS_CEC_UID="$(id -u "$STEAMOS_CEC_USER" 2>/dev/null || printf '')"
 
 log() {
   printf 'steamos-cec-resume-wake: %s\n' "$*"
@@ -61,6 +64,58 @@ configured_logical_address() {
 
 controller_wake_enabled() {
   [[ -e "$STEAM_BUTTON_UNIT" ]]
+}
+
+user_command() {
+  if [[ -z "$STEAMOS_CEC_UID" ]]; then
+    log "SteamOS user $STEAMOS_CEC_USER does not exist"
+    return 1
+  fi
+
+  runuser -u "$STEAMOS_CEC_USER" -- env \
+    XDG_RUNTIME_DIR="/run/user/$STEAMOS_CEC_UID" \
+    DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$STEAMOS_CEC_UID/bus" \
+    "$@"
+}
+
+user_systemctl() {
+  user_command systemctl --user "$@"
+}
+
+user_busctl() {
+  user_command busctl --user "$@"
+}
+
+restart_cecd() {
+  case "$CEC_RESUME_RESTART_CECD" in
+    0|false|False|no) return 0 ;;
+  esac
+
+  if user_systemctl restart cecd.service >/dev/null 2>&1; then
+    log "restarted user cecd.service"
+  else
+    log "warning: could not restart user cecd.service"
+  fi
+}
+
+cecd_device_available() {
+  user_busctl get-property \
+    com.steampowered.CecDaemon1 \
+    /com/steampowered/CecDaemon1/Devices/Cec0 \
+    com.steampowered.CecDaemon1.CecDevice1 \
+    Active >/dev/null 2>&1
+}
+
+wait_for_cecd_device() {
+  local deadline
+  deadline="$(( $(date +%s) + $(positive_integer "${CEC_DEVICE_WAIT_SECONDS%.*}" 12) ))"
+  while [[ "$(date +%s)" -lt "$deadline" ]]; do
+    if cecd_device_available; then
+      return 0
+    fi
+    sleep 0.5
+  done
+  cecd_device_available
 }
 
 wait_for_cec_device() {
@@ -120,24 +175,53 @@ physical_address_payload() {
 }
 
 send_raw() {
-  /usr/bin/cec-ctl -d "$CEC_DEVICE" -s --raw-msg "$@" || true
+  local output status
+  set +e
+  output="$(/usr/bin/cec-ctl -d "$CEC_DEVICE" -s --raw-msg "$@" 2>&1)"
+  status=$?
+  set -e
+  if [[ "$status" -ne 0 ]]; then
+    log "warning: raw CEC command failed: $output"
+  fi
+  return "$status"
+}
+
+cecd_wake() {
+  local output status
+  set +e
+  output="$(user_busctl call \
+    com.steampowered.CecDaemon1 \
+    /com/steampowered/CecDaemon1/Daemon \
+    com.steampowered.CecDaemon1.Daemon1 \
+    Wake 2>&1)"
+  status=$?
+  set -e
+  if [[ "$status" -ne 0 ]]; then
+    log "warning: cecd Wake failed: $output"
+  fi
+  return "$status"
 }
 
 send_wake_attempt() {
-  local source="$1" payload
+  local source="$1" payload failures=0
   payload="$(physical_address_payload || true)"
 
   log "sending wake/input activation from logical $source to TV $TV_LOGICAL_ADDRESS"
-  send_raw -f "$source" -t "$TV_LOGICAL_ADDRESS" --custom-command cmd=0x04
+  send_raw -f "$source" -t "$TV_LOGICAL_ADDRESS" --custom-command cmd=0x04 || failures=$((failures + 1))
   sleep 0.25
-  send_raw -f "$source" -t "$TV_LOGICAL_ADDRESS" --custom-command cmd=0x0d
+  send_raw -f "$source" -t "$TV_LOGICAL_ADDRESS" --custom-command cmd=0x0d || failures=$((failures + 1))
   sleep 0.25
 
+  cecd_wake || failures=$((failures + 1))
+  sleep 1
+
   if [[ -n "$payload" ]]; then
-    send_raw -f "$source" -t 15 --custom-command "cmd=0x82,payload=$payload"
+    send_raw -f "$source" -t 15 --custom-command "cmd=0x82,payload=$payload" || failures=$((failures + 1))
   else
     log "CEC_PHYSICAL_ADDRESS is not configured; skipping ACTIVE_SOURCE"
   fi
+
+  return "$failures"
 }
 
 main() {
@@ -153,12 +237,23 @@ main() {
     return 0
   fi
 
-  local attempt source
-  for attempt in $(seq 1 "$(positive_integer "$CEC_RESUME_WAKE_ATTEMPTS" 3)"); do
+  restart_cecd
+  if wait_for_cecd_device; then
+    sleep "$(non_negative_seconds "$CEC_RESUME_CECD_SETTLE_SECONDS" 3)"
+  else
+    log "warning: cecd CEC device object is not available; continuing with raw CEC fallback"
+  fi
+
+  local attempt attempts source
+  attempts="$(positive_integer "$CEC_RESUME_WAKE_ATTEMPTS" 3)"
+  for attempt in $(seq 1 "$attempts"); do
     source="$(wait_for_logical_address)"
-    send_wake_attempt "$source"
-    log "sent resume wake/input activation attempt $attempt"
-    if [[ "$attempt" -lt "$CEC_RESUME_WAKE_ATTEMPTS" ]]; then
+    if send_wake_attempt "$source"; then
+      log "sent resume wake/input activation attempt $attempt"
+    else
+      log "warning: resume wake/input activation attempt $attempt had CEC errors"
+    fi
+    if [[ "$attempt" -lt "$attempts" ]]; then
       sleep "$(non_negative_seconds "$CEC_RESUME_WAKE_RETRY_SECONDS" 4)"
     fi
   done
