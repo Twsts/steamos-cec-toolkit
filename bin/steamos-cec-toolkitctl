@@ -739,9 +739,13 @@ def set_service(name: str, enabled: bool) -> dict[str, Any]:
     if name not in USER_SERVICES:
         return {"ok": False, "error": f"Unknown service: {name}"}
     unit = USER_SERVICES[name]
-    action = "enable" if enabled else "disable"
-    state = "--now"
-    result = systemctl_user(action, state, unit)
+    if name == "boot-wake":
+        # boot-wake is a oneshot for the next Game Mode/session start. Starting
+        # it from a Decky toggle blocks until the CEC retry loop completes.
+        result = systemctl_user("enable" if enabled else "disable", unit)
+    else:
+        action = "enable" if enabled else "disable"
+        result = systemctl_user(action, "--now", unit)
     payload = status()
     payload["action"] = result
     if not result["ok"]:

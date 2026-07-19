@@ -152,6 +152,7 @@ fi
 HDMI_ALSA_CARD_NAME="${HDMI_ALSA_CARD_NAME:-alsa_card.pci-0000_03_00.1}"
 HDMI_ALSA_CARD_NICK="${HDMI_ALSA_CARD_NICK:-HDA ATI HDMI}"
 
+echo "Installing root helpers"
 sudo install -d -m 0755 /var/lib/steamos-cec-toolkit
 sudo install -m 0755 "$PROJECT_DIR/bin/steamos-cec-volume-raw" \
   /var/lib/steamos-cec-toolkit/steamos-cec-volume-raw
@@ -169,6 +170,8 @@ sudo install -m 0755 "$PROJECT_DIR/bin/steamos-cec-usb-wake-apply" \
   /var/lib/steamos-cec-toolkit/steamos-cec-usb-wake-apply
 sudo install -m 0755 "$PROJECT_DIR/bin/steamos-cec-usb-wake-control" \
   /var/lib/steamos-cec-toolkit/steamos-cec-usb-wake-control
+
+echo "Installing systemd units and udev rules"
 sudo install -D -m 0644 "$PROJECT_DIR/systemd/system/steamos-cec-before-sleep.service" \
   /etc/systemd/system/steamos-cec-before-sleep.service
 sudo install -D -m 0644 "$PROJECT_DIR/systemd/system/steamos-cec-permissions.service" \
@@ -182,6 +185,7 @@ sudo install -D -m 0644 "$PROJECT_DIR/udev/70-steamos-cec-toolkit.rules" \
 sudo install -D -m 0644 "$PROJECT_DIR/config/atomic-update-steamos-cec-toolkit.conf" \
   /etc/atomic-update.conf.d/steamos-cec-toolkit.conf
 
+echo "Configuring sudo permissions"
 sudoers_tmp="$(mktemp)"
 {
   printf '%s ALL=(root) NOPASSWD: /var/lib/steamos-cec-toolkit/steamos-cec-volume-raw *\n' "$(id -un)"
@@ -194,6 +198,7 @@ sudo install -m 0440 "$sudoers_tmp" /etc/sudoers.d/zz-steamos-cec-toolkit-volume
 rm -f "$sudoers_tmp"
 
 if [[ "$enable_external_volume" -eq 1 ]]; then
+  echo "Configuring CEC volume buttons"
   install -d "$HOME/.config/systemd/user/cec-audio-control.service.d"
   install -m 0644 "$PROJECT_DIR/systemd/user/cec-audio-control.service.d/override.conf" \
     "$HOME/.config/systemd/user/cec-audio-control.service.d/override.conf"
@@ -205,6 +210,7 @@ if [[ "$enable_external_volume" -eq 1 ]]; then
     > "$HOME/.config/wireplumber/wireplumber.conf.d/99-steamos-cec-external-volume.conf"
 fi
 
+echo "Installing user services"
 install -d "$HOME/.config/systemd/user"
 install -m 0644 "$PROJECT_DIR/systemd/user/steamos-cec-steam-button.service" \
   "$HOME/.config/systemd/user/steamos-cec-steam-button.service"
@@ -223,6 +229,7 @@ if [[ "$enable_tv_standby" -eq 1 || "$enable_input_away_suspend" -eq 1 || "$enab
   fi
 fi
 
+echo "Reloading systemd and applying CEC permissions"
 systemctl --user daemon-reload
 
 sudo systemctl daemon-reload
@@ -231,6 +238,7 @@ sudo /var/lib/steamos-cec-toolkit/steamos-cec-permissions-apply || true
 sudo systemctl enable --now steamos-cec-permissions.service
 systemctl --user restart cecd.service 2>/dev/null || true
 
+echo "Applying selected feature services"
 if [[ "$enable_steam_button" -eq 1 ]]; then
   systemctl --user enable --now steamos-cec-steam-button.service
   sudo systemctl enable steamos-cec-resume-wake.service
@@ -259,6 +267,7 @@ fi
 
 if [[ "$restart_services" -eq 1 ]]; then
   if [[ "$enable_external_volume" -eq 1 ]]; then
+    echo "Restarting audio services"
     systemctl --user stop cec-audio-control.service 2>/dev/null || true
     systemctl --user start cec-audio-control.socket 2>/dev/null || true
     systemctl --user restart wireplumber.service
