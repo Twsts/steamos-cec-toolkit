@@ -35,6 +35,7 @@ type Status = {
   cec_permissions_helper_exists?: boolean;
   sudoers_exists?: boolean;
   boot_wake_script_exists?: boolean;
+  resume_wake_script_exists?: boolean;
   cec_device?: {
     device: string;
     exists: boolean;
@@ -274,6 +275,7 @@ function DiagnosticsDetails({ status }: { status: Status | null }) {
       <div>Power standby helper: {yesNo(status.power_standby_helper_exists)}</div>
       <div>USB wake helper: {yesNo(status.usb_wake_helper_exists)}</div>
       <div>Boot wake helper: {yesNo(status.boot_wake_script_exists)}</div>
+      <div>Resume wake helper: {yesNo(status.resume_wake_script_exists)}</div>
       <div>CEC permissions: {status.cec_device?.readable && status.cec_device?.writable ? "OK" : "Needs repair"}</div>
       <div>Sudoers: {yesNo(status.sudoers_exists)}</div>
       <div>CEC volume buttons: {status.external_volume?.enabled ? "On" : "Off"}</div>
@@ -294,6 +296,7 @@ function needsInstallHelp(status: Status | null): boolean {
     !status.usb_wake_helper_exists ||
     !status.cec_permissions_helper_exists ||
     !status.boot_wake_script_exists ||
+    !status.resume_wake_script_exists ||
     !status.cec_device?.readable ||
     !status.cec_device?.writable ||
     !status.sudoers_exists ||
@@ -337,6 +340,9 @@ function missingItems(status: Status | null): string[] {
   }
   if (!status.boot_wake_script_exists) {
     items.push("boot wake helper");
+  }
+  if (!status.resume_wake_script_exists) {
+    items.push("resume wake helper");
   }
   if (!status.steam_button_script_exists) {
     items.push("controller wake helper");
@@ -636,10 +642,10 @@ function Content() {
         </PanelSectionRow>
         <PanelSectionRow>
           <ToggleField
-            label="Controller Button Wakes TV"
-            description="Use controller Home/Guide buttons to wake the TV/AVR and select this input"
+            label="Controller Wake / Input Switching"
+            description="Wake/select this input after controller resume or Home/Guide button press"
             checked={!!steamButton?.is_enabled}
-            disabled={busy || !status?.steam_button_script_exists}
+            disabled={busy || !status?.steam_button_script_exists || !status?.resume_wake_script_exists}
             onChange={(enabled: boolean) => void runAction(() => setService("steam-button", enabled))}
           />
         </PanelSectionRow>

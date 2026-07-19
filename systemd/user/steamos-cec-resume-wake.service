@@ -1,0 +1,13 @@
+[Unit]
+Description=Wake TV and activate SteamOS HDMI-CEC source after system resume
+After=cecd.service
+Wants=cecd.service
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/steamos-cec-resume-wake --monitor
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target

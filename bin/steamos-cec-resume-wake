@@ -1,0 +1,284 @@
+#!/usr/bin/env python3
+"""Wake TV/AVR and activate this HDMI-CEC source after system resume."""
+
+from __future__ import annotations
+
+import argparse
+import asyncio
+import logging
+import os
+import re
+import subprocess
+import time
+
+try:
+    from dbus_next import BusType
+    from dbus_next.aio import MessageBus
+except ImportError:
+    BusType = None
+    MessageBus = None
+
+
+CEC_BUS = "com.steampowered.CecDaemon1"
+CEC_DAEMON_PATH = "/com/steampowered/CecDaemon1/Daemon"
+CEC_DAEMON_INTERFACE = "com.steampowered.CecDaemon1.Daemon1"
+CEC_DEVICE_PATH = "/com/steampowered/CecDaemon1/Devices/Cec0"
+CEC_DEVICE_INTERFACE = "com.steampowered.CecDaemon1.CecDevice1"
+LOGIN1_BUS_NAME = "org.freedesktop.login1"
+LOGIN1_PATH = "/org/freedesktop/login1"
+LOGIN1_INTERFACE = "org.freedesktop.login1.Manager"
+DEFAULT_CONFIG = "/etc/steamos-cec-toolkit.conf"
+
+logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+LOG = logging.getLogger("steamos-cec-resume-wake")
+
+
+def read_config(path: str = DEFAULT_CONFIG) -> dict[str, str]:
+    config: dict[str, str] = {}
+    try:
+        with open(path, encoding="utf-8") as file:
+            for raw_line in file:
+                line = raw_line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, value = line.split("=", 1)
+                config[key.strip()] = value.strip().strip('"').strip("'")
+    except FileNotFoundError:
+        pass
+    return config
+
+
+SYSTEM_CONFIG = read_config(os.environ.get("STEAMOS_CEC_CONFIG", DEFAULT_CONFIG))
+STEAMOS_CEC_USER = SYSTEM_CONFIG.get("STEAMOS_CEC_USER", "deck")
+USER_CONFIG = f"/home/{STEAMOS_CEC_USER}/.config/steamos-cec-toolkit/config.conf"
+CONFIG = {**SYSTEM_CONFIG, **read_config(USER_CONFIG)}
+CEC_DEVICE = CONFIG.get("CEC_DEVICE", "/dev/cec0")
+TV_LOGICAL_ADDRESS = CONFIG.get("TV_LOGICAL_ADDRESS", "0")
+CEC_PLAYBACK_LOGICAL_ADDRESS = CONFIG.get("CEC_PLAYBACK_LOGICAL_ADDRESS", "4")
+CEC_PHYSICAL_ADDRESS = CONFIG.get("CEC_PHYSICAL_ADDRESS", "")
+RESUME_WAKE_DELAY_SECONDS = float(CONFIG.get("RESUME_WAKE_DELAY_SECONDS", "3"))
+RESUME_WAKE_SET_ACTIVE_DELAY_SECONDS = float(CONFIG.get("RESUME_WAKE_SET_ACTIVE_DELAY_SECONDS", "2"))
+RESUME_WAKE_ATTEMPTS = int(CONFIG.get("RESUME_WAKE_ATTEMPTS", "3"))
+RESUME_WAKE_RETRY_SECONDS = float(CONFIG.get("RESUME_WAKE_RETRY_SECONDS", "4"))
+RESUME_WAKE_COOLDOWN_SECONDS = float(CONFIG.get("RESUME_WAKE_COOLDOWN_SECONDS", "45"))
+
+
+def run(command: list[str], timeout: int = 8) -> subprocess.CompletedProcess[str]:
+    try:
+        return subprocess.run(
+            command,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            timeout=timeout,
+            check=False,
+        )
+    except subprocess.TimeoutExpired as error:
+        return subprocess.CompletedProcess(
+            command,
+            124,
+            stdout=f"timed out after {error.timeout} seconds",
+        )
+
+
+def run_busctl(args: list[str], timeout: int = 8) -> subprocess.CompletedProcess[str]:
+    return run(["busctl", "--user", *args], timeout=timeout)
+
+
+def restart_cecd() -> None:
+    result = run(["systemctl", "--user", "restart", "cecd.service"], timeout=8)
+    if result.returncode != 0:
+        LOG.warning("Failed to restart cecd.service: %s", result.stdout.strip())
+
+
+def wait_for_cecd_object() -> bool:
+    for _ in range(10):
+        result = run_busctl(
+            [
+                "get-property",
+                CEC_BUS,
+                CEC_DEVICE_PATH,
+                CEC_DEVICE_INTERFACE,
+                "Active",
+            ],
+            timeout=3,
+        )
+        if result.returncode == 0:
+            return True
+        time.sleep(1)
+    LOG.warning("Timed out waiting for SteamOS CEC D-Bus object")
+    return False
+
+
+def cec_device_ready() -> bool:
+    deadline = time.monotonic() + 8.0
+    while time.monotonic() < deadline:
+        if os.path.exists(CEC_DEVICE) and os.access(CEC_DEVICE, os.R_OK | os.W_OK):
+            return True
+        time.sleep(0.5)
+    return os.path.exists(CEC_DEVICE) and os.access(CEC_DEVICE, os.R_OK | os.W_OK)
+
+
+def physical_address_integer() -> str | None:
+    try:
+        parts = [int(part, 16) for part in CEC_PHYSICAL_ADDRESS.split(".")]
+    except ValueError:
+        return None
+    if len(parts) != 4 or any(part < 0 or part > 15 for part in parts):
+        return None
+    return str((parts[0] << 12) | (parts[1] << 8) | (parts[2] << 4) | parts[3])
+
+
+def physical_address_payload() -> str | None:
+    try:
+        parts = [int(part, 16) for part in CEC_PHYSICAL_ADDRESS.split(".")]
+    except ValueError:
+        return None
+    if len(parts) != 4 or any(part < 0 or part > 15 for part in parts):
+        return None
+    return f"0x{(parts[0] << 4) | parts[1]:02x}:0x{(parts[2] << 4) | parts[3]:02x}"
+
+
+def current_playback_logical_address() -> str:
+    for args, timeout in ((["-l"], 5), (["-L"], 5), (["-S"], 12)):
+        result = run(["cec-ctl", "-d", CEC_DEVICE, *args], timeout=timeout)
+        if result.returncode != 0:
+            continue
+        plain_match = re.search(r"^\s*(\d+)\s*$", result.stdout, re.MULTILINE)
+        if plain_match:
+            return plain_match.group(1)
+        match = re.search(r"Logical Address\s*:\s*(\d+)\s*\(", result.stdout)
+        if match:
+            return match.group(1)
+    return CEC_PLAYBACK_LOGICAL_ADDRESS
+
+
+def raw_cec(command: list[str]) -> subprocess.CompletedProcess[str]:
+    return run(["cec-ctl", "-d", CEC_DEVICE, "-s", "--raw-msg", *command], timeout=8)
+
+
+def raw_wake_and_active_source() -> None:
+    if not cec_device_ready():
+        LOG.warning("CEC device %s is missing or not writable; skipping raw resume wake", CEC_DEVICE)
+        return
+
+    playback = current_playback_logical_address()
+    active_source_payload = physical_address_payload()
+    commands = [
+        ["-f", playback, "-t", TV_LOGICAL_ADDRESS, "--custom-command", "cmd=0x04"],
+        ["-f", playback, "-t", TV_LOGICAL_ADDRESS, "--custom-command", "cmd=0x0d"],
+    ]
+    if active_source_payload:
+        commands.append([
+            "-f",
+            playback,
+            "-t",
+            "15",
+            "--custom-command",
+            f"cmd=0x82,payload={active_source_payload}",
+        ])
+
+    for command in commands:
+        result = raw_cec(command)
+        if result.returncode != 0:
+            LOG.warning("Raw resume CEC command failed: %s", result.stdout.strip())
+        time.sleep(0.25)
+
+
+def cecd_wake_and_set_active_source() -> None:
+    wake = run_busctl(
+        [
+            "call",
+            CEC_BUS,
+            CEC_DAEMON_PATH,
+            CEC_DAEMON_INTERFACE,
+            "Wake",
+        ],
+        timeout=10,
+    )
+    if wake.returncode != 0:
+        LOG.warning("cecd Wake failed: %s", wake.stdout.strip())
+
+    time.sleep(RESUME_WAKE_SET_ACTIVE_DELAY_SECONDS)
+    physical_integer = physical_address_integer()
+    if not physical_integer:
+        LOG.warning("CEC_PHYSICAL_ADDRESS is not configured; skipping cecd SetActiveSource")
+        return
+
+    active = run_busctl(
+        [
+            "call",
+            CEC_BUS,
+            CEC_DEVICE_PATH,
+            CEC_DEVICE_INTERFACE,
+            "SetActiveSource",
+            "i",
+            physical_integer,
+        ],
+        timeout=10,
+    )
+    if active.returncode != 0:
+        LOG.warning("cecd SetActiveSource failed: %s", active.stdout.strip())
+
+
+def activate_after_resume() -> int:
+    if RESUME_WAKE_DELAY_SECONDS > 0:
+        time.sleep(RESUME_WAKE_DELAY_SECONDS)
+
+    wait_for_cecd_object()
+
+    for attempt in range(1, RESUME_WAKE_ATTEMPTS + 1):
+        cecd_wake_and_set_active_source()
+        raw_wake_and_active_source()
+        LOG.info("Sent resume wake/input activation attempt %d", attempt)
+        if attempt < RESUME_WAKE_ATTEMPTS:
+            time.sleep(RESUME_WAKE_RETRY_SECONDS)
+
+    LOG.info("Finished resume wake/input activation attempts")
+    return 0
+
+
+async def monitor_resume() -> None:
+    if BusType is None or MessageBus is None:
+        LOG.warning("dbus_next is missing; system resume CEC activation is disabled")
+        return
+
+    try:
+        bus = await MessageBus(bus_type=BusType.SYSTEM).connect()
+        introspection = await bus.introspect(LOGIN1_BUS_NAME, LOGIN1_PATH)
+        proxy = bus.get_proxy_object(LOGIN1_BUS_NAME, LOGIN1_PATH, introspection)
+        manager = proxy.get_interface(LOGIN1_INTERFACE)
+    except Exception as error:
+        LOG.warning("Cannot monitor system resume: %s", error)
+        return
+
+    state = {"last_activation": 0.0}
+
+    def prepare_for_sleep(sleeping):
+        LOG.info("PrepareForSleep sleeping=%s", sleeping)
+        if sleeping:
+            return
+        now = time.monotonic()
+        if now - state["last_activation"] < RESUME_WAKE_COOLDOWN_SECONDS:
+            LOG.info("Skipping resume wake due to cooldown")
+            return
+        state["last_activation"] = now
+        asyncio.get_running_loop().create_task(asyncio.to_thread(activate_after_resume))
+
+    manager.on_prepare_for_sleep(prepare_for_sleep)
+    LOG.info("Monitoring system resume for CEC wake/input activation")
+    await asyncio.get_running_loop().create_future()
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--monitor", action="store_true")
+    args = parser.parse_args()
+    if args.monitor:
+        asyncio.run(monitor_resume())
+        return 0
+    return activate_after_resume()
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

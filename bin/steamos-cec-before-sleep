@@ -30,6 +30,12 @@ run_as_user_bus() {
 
 current_playback_logical_address() {
   local logical
+  logical="$(/usr/bin/cec-ctl -d "$CEC_DEVICE" -l 2>/dev/null | awk '/^[[:space:]]*[0-9]+[[:space:]]*$/ {print $1; exit}')"
+  if [[ "$logical" =~ ^[0-9]+$ ]]; then
+    printf '%s\n' "$logical"
+    return
+  fi
+
   logical="$(
     /usr/bin/cec-ctl -d "$CEC_DEVICE" -S 2>/dev/null |
       awk '/^[[:space:]]+Logical Address[[:space:]]+:/ {print $4; exit}'
@@ -70,6 +76,19 @@ fi
 
 echo "steamos-cec: sending TV standby before sleep/shutdown"
 
+if [[ -e "$CEC_DEVICE" ]]; then
+  playback_logical_address="$(current_playback_logical_address)"
+  echo "steamos-cec: CEC standby source logical address $playback_logical_address"
+
+  send_native_standby "$TV_LOGICAL_ADDRESS"
+  sleep 0.25
+  send_raw_standby "$playback_logical_address" "$TV_LOGICAL_ADDRESS"
+  sleep 0.25
+  send_native_standby 15
+  sleep 0.25
+  send_raw_standby "$playback_logical_address" 15
+fi
+
 run_as_user_bus busctl --user call \
   com.steampowered.CecDaemon1 \
   /com/steampowered/CecDaemon1/Daemon \
@@ -85,13 +104,6 @@ run_as_user_bus busctl --user call \
   || true
 
 if [[ -e "$CEC_DEVICE" ]]; then
-  playback_logical_address="$(current_playback_logical_address)"
-  echo "steamos-cec: CEC standby source logical address $playback_logical_address"
-
-  send_native_standby "$TV_LOGICAL_ADDRESS"
-  sleep 0.25
-  send_native_standby 15
-
   for delay in 0.5 1.0; do
     sleep "$delay"
     send_raw_standby "$playback_logical_address" "$TV_LOGICAL_ADDRESS"

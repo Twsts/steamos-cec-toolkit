@@ -610,10 +610,17 @@ matching can also vary by GPU, adapter, and distro image.
 
 ## Controller Wake and Input Switching
 
-The `steamos-cec-steam-button` service watches controller Home/Guide input
-events from gamepad-like Linux input devices. It also keeps the original Steam
-Controller HID profile as a fallback. When triggered, it wakes/powers on the
-TV/AVR chain and activates the SteamOS HDMI source by calling SteamOS `cecd`:
+The `Controller Wake / Input Switching` feature has two parts:
+
+- `steamos-cec-resume-wake` runs after SteamOS wakes from suspend, regardless
+  of whether the wake came from an Xbox controller, DualSense, Steam
+  Controller, keyboard, mouse, or power button.
+- `steamos-cec-steam-button` watches controller Home/Guide input events while
+  SteamOS is already awake. It also keeps the original Steam Controller HID
+  profile as a fallback.
+
+When triggered, the toolkit wakes/powers on the TV/AVR chain and activates the
+SteamOS HDMI source by calling SteamOS `cecd`:
 
 ```bash
 busctl --user call \
@@ -625,6 +632,7 @@ busctl --user call \
 
 It triggers on:
 
+- system resume from suspend
 - supported controller Home/Guide button events
 - original Steam Controller connect/resume
 - original Steam Controller short Steam-button press
