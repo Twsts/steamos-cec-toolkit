@@ -23,17 +23,6 @@ run_user_systemctl() {
     systemctl --user "$@"
 }
 
-restart_system_service_best_effort() {
-  local unit="$1"
-  local timeout_seconds="${2:-20}"
-
-  if command -v timeout >/dev/null 2>&1; then
-    timeout "$timeout_seconds" systemctl restart "$unit"
-  else
-    systemctl restart "$unit"
-  fi
-}
-
 source_file() {
   local relative_path="$1"
   local flat_name="${relative_path##*/}"
@@ -196,10 +185,8 @@ run_user_systemctl try-restart steamos-cec-boot-wake.service || true
 run_user_systemctl try-restart steamos-cec-steam-button.service || true
 run_user_systemctl try-restart steamos-cec-input-away-suspend.service || true
 run_user_systemctl try-restart steamos-cec-gamescope-recovery.service || true
-if ! restart_system_service_best_effort plugin_loader.service 20; then
-  echo "Decky Loader restart did not complete. Restart Steam or reboot if the plugin does not update immediately." >&2
-fi
 
 echo "Installed SteamOS CEC Toolkit Decky plugin update."
 echo "Plugin: $PLUGIN_DIR/steamos-cec-toolkit"
 echo "Root helpers: $ROOT_HELPER_DIR"
+echo "Restart Steam or reboot if the Decky plugin does not update immediately."

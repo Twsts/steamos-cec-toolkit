@@ -93,17 +93,6 @@ require_command() {
   fi
 }
 
-restart_system_service_best_effort() {
-  local unit="$1"
-  local timeout_seconds="${2:-20}"
-
-  if command -v timeout >/dev/null 2>&1; then
-    sudo timeout "$timeout_seconds" systemctl restart "$unit"
-  else
-    sudo systemctl restart "$unit"
-  fi
-}
-
 if [[ "$(id -u)" -eq 0 ]]; then
   echo "Run this installer as the SteamOS desktop user, usually 'deck', not as root." >&2
   exit 1
@@ -255,14 +244,8 @@ if [[ "$install_decky" -eq 1 ]]; then
   sudo chown -R root:root "$PLUGIN_DIR/$PLUGIN_NAME"
   sudo chmod -R a+rX "$PLUGIN_DIR/$PLUGIN_NAME"
 
-  if systemctl list-unit-files plugin_loader.service >/dev/null 2>&1; then
-    say "Restarting Decky Loader"
-    if restart_system_service_best_effort plugin_loader.service 20; then
-      say "Decky Loader restarted"
-    else
-      say "Decky Loader restart did not complete. The plugin was installed; restart Steam or reboot if it does not appear."
-    fi
-  fi
+  say "Decky plugin files installed"
+  say "If Game Mode does not show the updated plugin immediately, restart Steam or reboot."
 else
   step "Skipping Decky plugin"
   say "You can manage the toolkit with ~/.local/bin/steamos-cec-toolkitctl and rerun this installer later to add the plugin."
