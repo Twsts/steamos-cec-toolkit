@@ -399,6 +399,18 @@ function configValue(status: Status | null, key: string, fallback: string): stri
   return status?.config?.[key] || fallback;
 }
 
+// Unlike configValue(), this does not fall back when the key is present but
+// set to an empty string — CEC_VOLUME_INITIATOR="" is a meaningful "let the
+// kernel choose" value, not an unset one.
+function configValueAllowEmpty(status: Status | null, key: string, fallback: string): string {
+  const value = status?.config?.[key];
+  return value !== undefined ? value : fallback;
+}
+
+function formatInitiator(value: string): string {
+  return value === "" ? "auto" : value;
+}
+
 function ConfigDetails({ status }: { status: Status | null }) {
   if (!status?.ok) {
     return null;
@@ -406,8 +418,9 @@ function ConfigDetails({ status }: { status: Status | null }) {
 
   const cecDevice = configValue(status, "CEC_DEVICE", "/dev/cec0");
   const physicalAddress = configValue(status, "CEC_PHYSICAL_ADDRESS", "Not discovered");
-  const initiator = configValue(status, "CEC_VOLUME_INITIATOR", "0");
-  const audioTarget = configValue(status, "CEC_AUDIO_LOGICAL_ADDRESS", "5");
+  const initiator = configValueAllowEmpty(status, "CEC_VOLUME_INITIATOR", "");
+  const audioTarget = configValue(status, "CEC_AUDIO_LOGICAL_ADDRESS", "0");
+  const simplinkAck = configValue(status, "CEC_SIMPLINK_ACK", "0") === "1";
   const cardName = configValue(status, "HDMI_ALSA_CARD_NAME", "alsa_card.pci-0000_03_00.1");
   const cardNick = configValue(status, "HDMI_ALSA_CARD_NICK", "HDA ATI HDMI");
   const route = configValue(status, "EXTERNAL_VOLUME_ROUTE", "hdmi-output-0");
@@ -416,7 +429,8 @@ function ConfigDetails({ status }: { status: Status | null }) {
     <div style={{ fontSize: "12px", opacity: 0.8, lineHeight: 1.35 }}>
       <div>CEC device: {cecDevice}</div>
       <div>Physical address: {physicalAddress}</div>
-      <div>Volume path: logical {initiator} to {audioTarget}</div>
+      <div>Volume path: logical {formatInitiator(initiator)} to {audioTarget}</div>
+      {simplinkAck && <div>LG SIMPLINK handshake: enabled</div>}
       <div>Route: {route}</div>
       <div>HDMI card: {cardName} / {cardNick}</div>
     </div>
@@ -587,8 +601,17 @@ function Content() {
     data: device,
     label: device,
   }));
-  const initiator = configValue(status, "CEC_VOLUME_INITIATOR", discovered?.suggested?.CEC_VOLUME_INITIATOR || "0");
-  const audioTarget = configValue(status, "CEC_AUDIO_LOGICAL_ADDRESS", discovered?.suggested?.CEC_AUDIO_LOGICAL_ADDRESS || "5");
+  const initiator = configValueAllowEmpty(
+    status,
+    "CEC_VOLUME_INITIATOR",
+    discovered?.suggested?.CEC_VOLUME_INITIATOR ?? "",
+  );
+  const audioTarget = configValue(status, "CEC_AUDIO_LOGICAL_ADDRESS", discovered?.suggested?.CEC_AUDIO_LOGICAL_ADDRESS || "0");
+  const simplinkAck = configValue(status, "CEC_SIMPLINK_ACK", discovered?.suggested?.CEC_SIMPLINK_ACK || "0") === "1";
+  const initiatorOptions = [
+    { data: "", label: "Auto (recommended)" },
+    ...deviceOptions.filter((option) => option.data !== ""),
+  ];
   const audioCardName = configValue(status, "HDMI_ALSA_CARD_NAME", audioDiscovery?.suggested?.HDMI_ALSA_CARD_NAME || "alsa_card.pci-0000_03_00.1");
   const audioRoute = configValue(status, "EXTERNAL_VOLUME_ROUTE", audioDiscovery?.suggested?.EXTERNAL_VOLUME_ROUTE || "hdmi-output-0");
   const inputInactiveDelay = configValue(
@@ -776,8 +799,8 @@ function Content() {
         <PanelSectionRow>
           <DropdownItem
             label="Volume Initiator"
-            description="Usually TV logical address 0 for receivers that reject playback-device volume"
-            rgOptions={deviceOptions.length ? deviceOptions : [{ data: initiator, label: `Logical ${initiator}` }]}
+            description="Auto is correct for almost everyone. Only spoof a fixed logical address (e.g. TV) for a receiver that rejects playback-device-originated volume."
+            rgOptions={initiatorOptions}
             selectedOption={initiator}
             disabled={busy}
             onChange={(option) => void runAction(() => setConfig({ CEC_VOLUME_INITIATOR: String(option.data) }))}
@@ -786,11 +809,20 @@ function Content() {
         <PanelSectionRow>
           <DropdownItem
             label="Audio Target"
-            description="The receiver/audio-system logical address that receives volume commands"
+            description="The receiver/audio-system logical address that receives volume commands. Use the TV (0) if there is no separate Audio System on the bus."
             rgOptions={deviceOptions.length ? deviceOptions : [{ data: audioTarget, label: `Logical ${audioTarget}` }]}
             selectedOption={audioTarget}
             disabled={busy}
             onChange={(option) => void runAction(() => setConfig({ CEC_AUDIO_LOGICAL_ADDRESS: String(option.data) }))}
+          />
+        </PanelSectionRow>
+        <PanelSectionRow>
+          <ToggleField
+            label="LG SIMPLINK Handshake"
+            description="LG TVs ignore CEC volume keys until they receive LG's SIMPLINK vendor-command handshake. Enable this if volume does nothing on an LG TV despite a correct Volume Initiator/Audio Target."
+            checked={simplinkAck}
+            disabled={busy}
+            onChange={(enabled: boolean) => void runAction(() => setConfig({ CEC_SIMPLINK_ACK: enabled ? "1" : "0" }))}
           />
         </PanelSectionRow>
         <PanelSectionRow>

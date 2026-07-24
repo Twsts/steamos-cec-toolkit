@@ -10,11 +10,25 @@ CEC_PHYSICAL_ADDRESS=
 # SteamOS desktop user. Official Steam Deck/SteamOS images normally use deck.
 STEAMOS_CEC_USER=deck
 
-# Some receivers only accept volume commands when the initiator is the TV
-# logical address. TV is normally 0. Audio System is normally 5.
-CEC_VOLUME_INITIATOR=0
+# Leave CEC_VOLUME_INITIATOR empty to let the kernel supply the adapter's own
+# logical address and validate the frame before sending it. This is correct
+# for almost everyone. Set it to 0 (TV) only for receivers that refuse volume
+# commands unless they appear to come from the TV; this forces --raw-msg,
+# which bypasses kernel validation and error reporting, so a bad frame can be
+# "sent" without any indication that nothing happened.
+CEC_VOLUME_INITIATOR=
+
+# Audio System (AVR/soundbar) is normally 5. If no Audio System is present on
+# the bus and the TV renders audio itself, use 0 (TV).
 CEC_AUDIO_LOGICAL_ADDRESS=5
 CEC_VOLUME_PRESS_SECONDS=0.25
+
+# LG TVs ignore CEC volume keys until they receive a SIMPLINK vendor-command
+# handshake. Set CEC_SIMPLINK_ACK=1 if the TV's vendor ID is 0x00e091 (LG) or
+# volume otherwise does nothing despite a well-formed frame. CEC_SIMPLINK_PAYLOAD
+# rarely needs changing.
+CEC_SIMPLINK_ACK=0
+CEC_SIMPLINK_PAYLOAD=0x02:0x05
 
 # PipeWire/WirePlumber card match. Find with:
 #   wpctl status

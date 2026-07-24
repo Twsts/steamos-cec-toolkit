@@ -182,6 +182,8 @@ def write_user_config(updates: dict[str, str]) -> None:
         "CEC_PHYSICAL_ADDRESS",
         "CEC_VOLUME_INITIATOR",
         "CEC_AUDIO_LOGICAL_ADDRESS",
+        "CEC_SIMPLINK_ACK",
+        "CEC_SIMPLINK_PAYLOAD",
         "HDMI_ALSA_CARD_NAME",
         "HDMI_ALSA_CARD_NICK",
         "EXTERNAL_VOLUME_ROUTE",
@@ -194,7 +196,7 @@ def write_user_config(updates: dict[str, str]) -> None:
     for key, value in updates.items():
         if key not in allowed:
             raise ValueError(f"Unsupported config key: {key}")
-        if not re.fullmatch(r"[A-Za-z0-9_./: ,+()[\]-]+", value):
+        if value and not re.fullmatch(r"[A-Za-z0-9_./: ,+()[\]-]+", value):
             raise ValueError(f"Unsupported value for {key}")
         current[key] = value
 
@@ -266,8 +268,8 @@ def discover_cec() -> dict[str, Any]:
                 "suggested": {
                     "CEC_DEVICE": available[0] if len(available) == 1 else cec_device,
                     "CEC_PHYSICAL_ADDRESS": "",
-                    "CEC_VOLUME_INITIATOR": "0",
-                    "CEC_AUDIO_LOGICAL_ADDRESS": "5",
+                    "CEC_VOLUME_INITIATOR": "",
+                    "CEC_AUDIO_LOGICAL_ADDRESS": "0",
                 },
                 "error": (
                     f"{detail} "
@@ -337,6 +339,7 @@ def discover_cec() -> dict[str, Any]:
         (device for device in devices if device.get("device_type") == "Audio System"),
         None,
     )
+    tv_is_lg = bool(tv) and tv.get("vendor", "").lower().lstrip().startswith("0x00e091")
     payload = {
         "ok": result["ok"],
         "cec_device": cec_device,
@@ -345,8 +348,9 @@ def discover_cec() -> dict[str, Any]:
         "suggested": {
             "CEC_DEVICE": cec_device,
             "CEC_PHYSICAL_ADDRESS": adapter_physical_address,
-            "CEC_VOLUME_INITIATOR": tv["logical_address"] if tv else "0",
-            "CEC_AUDIO_LOGICAL_ADDRESS": audio["logical_address"] if audio else "5",
+            "CEC_VOLUME_INITIATOR": "",
+            "CEC_AUDIO_LOGICAL_ADDRESS": audio["logical_address"] if audio else "0",
+            "CEC_SIMPLINK_ACK": "1" if tv_is_lg else "0",
         },
         "note": multiple_note,
         "error": "" if result["ok"] else result["stdout"],

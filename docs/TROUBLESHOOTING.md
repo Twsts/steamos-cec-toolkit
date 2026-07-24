@@ -122,6 +122,69 @@ If it only accepts TV-originated volume commands, keep:
 CEC_VOLUME_INITIATOR=0
 ```
 
+## Volume Does Nothing on an LG TV With No Receiver
+
+This is a different failure than the receiver case above, with a different fix.
+
+Check topology:
+
+```bash
+cec-ctl -d /dev/cec0 --show-topology
+```
+
+If there is no `Audio System` device listed, the TV renders its own audio.
+Set:
+
+```bash
+CEC_AUDIO_LOGICAL_ADDRESS=0
+CEC_VOLUME_INITIATOR=
+```
+
+leaving `CEC_VOLUME_INITIATOR` empty so the kernel supplies the adapter's own
+logical address and validates the frame. If the TV's `Vendor ID` in the
+topology output is `0x00e091` (LG), also set:
+
+```bash
+CEC_SIMPLINK_ACK=1
+```
+
+LG TVs run a vendor extension called SIMPLINK on top of standard HDMI-CEC and
+gate `User Control Pressed` (the opcode volume/mute use) behind a SIMPLINK
+vendor-command handshake. Without it, the TV silently drops volume keys while
+continuing to answer unrelated CEC queries like power status normally, which
+makes it look like nothing is happening at all rather than failing loudly.
+
+Confirm with a bus capture. This needs root:
+
+```bash
+sudo cec-ctl -d /dev/cec0 -s --monitor-all --monitor-time 20 --show-raw --wall-clock
+```
+
+A `FEATURE_ABORT` reply to `VENDOR_COMMAND (0x89)` with payload `0x01` is the
+signature of a refused SIMPLINK handshake — the TV is trying to establish a
+SIMPLINK session and the connected device (previously this toolkit) is
+rejecting it.
+
+**Do not diagnose this by manually running `cec-ctl --playback`,
+`--vendor-id`, or anything else that reclaims the adapter's logical
+address**, even to inspect state (`--show-topology` alone is read-only and
+safe). SteamOS's own `cecd.service` owns the adapter continuously in the
+background and already sets the correct vendor ID to match the connected TV.
+Manually reclaiming the adapter races with `cecd`, which reacts by
+briefly resetting its own logical address and vendor ID before reasserting
+them — and while that race is in progress, volume commands from *either*
+side can silently fail. If you're mid-troubleshooting and volume stops
+responding for no clear reason, wait several seconds without touching the
+adapter and retest before concluding the fix doesn't work.
+
+If a transmit reports success but nothing happens and none of the above
+explains it, remember that `--raw-msg` (used only when `CEC_VOLUME_INITIATOR`
+is explicitly set to something other than `CEC_AUDIO_LOGICAL_ADDRESS`)
+suppresses all kernel-side validation of the frame. A transmit can exit 0
+while having sent a malformed or nonsensically-addressed message. Prefer
+leaving `CEC_VOLUME_INITIATOR` empty so the kernel validates every frame
+before it goes out.
+
 ## Audio Device Disappears
 
 Rollback the ExternalVolume integration:

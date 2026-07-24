@@ -15,25 +15,39 @@ if [[ -r "$USER_CONFIG" ]]; then
 fi
 
 CEC_DEVICE="${CEC_DEVICE:-/dev/cec0}"
-CEC_VOLUME_INITIATOR="${CEC_VOLUME_INITIATOR:-0}"
-CEC_AUDIO_LOGICAL_ADDRESS="${CEC_AUDIO_LOGICAL_ADDRESS:-5}"
+CEC_VOLUME_INITIATOR="${CEC_VOLUME_INITIATOR:-}"
+CEC_AUDIO_LOGICAL_ADDRESS="${CEC_AUDIO_LOGICAL_ADDRESS:-0}"
 CEC_VOLUME_PRESS_SECONDS="${CEC_VOLUME_PRESS_SECONDS:-0.25}"
+CEC_SIMPLINK_ACK="${CEC_SIMPLINK_ACK:-0}"
+CEC_SIMPLINK_PAYLOAD="${CEC_SIMPLINK_PAYLOAD:-0x02:0x05}"
 
 case "${1:-}" in
-  up) payload="0x41" ;;
-  down) payload="0x42" ;;
-  mute) payload="0x43" ;;
+  up) uicmd="volume-up" ;;
+  down) uicmd="volume-down" ;;
+  mute) uicmd="mute" ;;
   *) echo "usage: $0 up|down|mute" >&2; exit 2 ;;
 esac
 
-/usr/bin/cec-ctl -d "$CEC_DEVICE" -s --raw-msg \
-  -f "$CEC_VOLUME_INITIATOR" \
-  -t "$CEC_AUDIO_LOGICAL_ADDRESS" \
-  --custom-command cmd=0x44,payload="$payload"
+# Some receivers only accept TV-originated volume. When an explicit initiator
+# is configured we must use --raw-msg, which bypasses kernel validation. An
+# initiator equal to the target is never meaningful (a device can't usefully
+# spoof itself) and only shows up from configs written under the old default
+# of CEC_VOLUME_INITIATOR=0, so treat that combination as no override.
+tx_args=(-d "$CEC_DEVICE" -s -t "$CEC_AUDIO_LOGICAL_ADDRESS")
+if [[ -n "$CEC_VOLUME_INITIATOR" && "$CEC_VOLUME_INITIATOR" != "$CEC_AUDIO_LOGICAL_ADDRESS" ]]; then
+  tx_args+=(--raw-msg -f "$CEC_VOLUME_INITIATOR")
+fi
+
+# LG SIMPLINK: LG TVs ignore user-control keys until the vendor handshake
+# completes. 0x02 0x05 = SL_COMMAND_ACK_INIT, SL_COMMAND_TYPE_HDDRECORDER.
+if [[ "$CEC_SIMPLINK_ACK" == "1" ]]; then
+  /usr/bin/cec-ctl "${tx_args[@]}" \
+    --vendor-command payload="$CEC_SIMPLINK_PAYLOAD" \
+    >/dev/null 2>&1 || true
+fi
+
+/usr/bin/cec-ctl "${tx_args[@]}" --user-control-pressed ui-cmd="$uicmd"
 
 sleep "$CEC_VOLUME_PRESS_SECONDS"
 
-/usr/bin/cec-ctl -d "$CEC_DEVICE" -s --raw-msg \
-  -f "$CEC_VOLUME_INITIATOR" \
-  -t "$CEC_AUDIO_LOGICAL_ADDRESS" \
-  --custom-command cmd=0x45
+/usr/bin/cec-ctl "${tx_args[@]}" --user-control-released
