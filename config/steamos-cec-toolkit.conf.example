@@ -24,11 +24,15 @@ CEC_AUDIO_LOGICAL_ADDRESS=5
 CEC_VOLUME_PRESS_SECONDS=0.25
 
 # LG TVs ignore CEC volume keys until they receive a SIMPLINK vendor-command
-# handshake. Set CEC_SIMPLINK_ACK=1 if the TV's vendor ID is 0x00e091 (LG) or
-# volume otherwise does nothing despite a well-formed frame. CEC_SIMPLINK_PAYLOAD
-# rarely needs changing.
+# handshake, and only honor it from an adapter that has announced a vendor
+# ID. Set CEC_SIMPLINK_ACK=1 if the TV's vendor ID is 0x00e091 (LG) or volume
+# otherwise does nothing despite a well-formed frame. When enabled, the
+# script claims CEC_SIMPLINK_VENDOR_ID for the adapter itself if nothing has
+# claimed one yet (SteamOS's cecd usually does this on its own, but not
+# always immediately after boot). CEC_SIMPLINK_PAYLOAD rarely needs changing.
 CEC_SIMPLINK_ACK=0
 CEC_SIMPLINK_PAYLOAD=0x02:0x05
+CEC_SIMPLINK_VENDOR_ID=0x00e091
 
 # PipeWire/WirePlumber card match. Find with:
 #   wpctl status

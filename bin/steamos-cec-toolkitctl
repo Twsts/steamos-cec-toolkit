@@ -184,6 +184,7 @@ def write_user_config(updates: dict[str, str]) -> None:
         "CEC_AUDIO_LOGICAL_ADDRESS",
         "CEC_SIMPLINK_ACK",
         "CEC_SIMPLINK_PAYLOAD",
+        "CEC_SIMPLINK_VENDOR_ID",
         "HDMI_ALSA_CARD_NAME",
         "HDMI_ALSA_CARD_NICK",
         "EXTERNAL_VOLUME_ROUTE",

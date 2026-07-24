@@ -165,17 +165,34 @@ signature of a refused SIMPLINK handshake — the TV is trying to establish a
 SIMPLINK session and the connected device (previously this toolkit) is
 rejecting it.
 
-**Do not diagnose this by manually running `cec-ctl --playback`,
-`--vendor-id`, or anything else that reclaims the adapter's logical
-address**, even to inspect state (`--show-topology` alone is read-only and
-safe). SteamOS's own `cecd.service` owns the adapter continuously in the
-background and already sets the correct vendor ID to match the connected TV.
-Manually reclaiming the adapter races with `cecd`, which reacts by
+LG's SIMPLINK also only responds to an adapter that has announced a vendor
+ID. SteamOS's own `cecd.service` owns the adapter in the background and
+usually auto-matches the adapter's vendor ID to the connected TV's, but that
+auto-match is not guaranteed to have happened yet — most commonly right
+after boot or a fresh HDMI connect, before `cecd` has observed the TV on the
+bus. When `CEC_SIMPLINK_ACK=1`, the volume script checks for this itself
+(`cec-ctl -d "$CEC_DEVICE"`, looking for a `Vendor ID` line) and claims
+`CEC_SIMPLINK_VENDOR_ID` (default `0x00e091`, LG) only when it's actually
+missing, so this should self-heal without any action on your part. If
+volume still does nothing, confirm:
+
+```bash
+cec-ctl -d /dev/cec0 | grep "Vendor ID"
+```
+
+No output means the adapter has no vendor ID claimed. If it stays empty
+across repeated volume attempts, something is preventing the script's own
+claim from succeeding — check that `/usr/bin/cec-ctl` is reachable from the
+script's context (root, via the sudoers rule) and not just your shell.
+
+**While diagnosing manually, avoid running `cec-ctl --playback`,
+`--vendor-id`, `--clear`, or anything else that reclaims the adapter's
+logical address** in a tight loop, even though the script above does this
+safely on its own. Reclaiming the adapter races with `cecd`: it reacts by
 briefly resetting its own logical address and vendor ID before reasserting
-them — and while that race is in progress, volume commands from *either*
-side can silently fail. If you're mid-troubleshooting and volume stops
-responding for no clear reason, wait several seconds without touching the
-adapter and retest before concluding the fix doesn't work.
+them, and while that race is in progress, volume commands from *either*
+side can transiently fail. `--show-topology` and a bare `cec-ctl -d
+/dev/cec0` are both read-only and always safe to run.
 
 If a transmit reports success but nothing happens and none of the above
 explains it, remember that `--raw-msg` (used only when `CEC_VOLUME_INITIATOR`
