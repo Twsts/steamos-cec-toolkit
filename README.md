@@ -444,8 +444,9 @@ Important defaults:
 ```bash
 CEC_DEVICE=/dev/cec0
 STEAMOS_CEC_USER=<install-user>
-CEC_VOLUME_INITIATOR=0
+CEC_VOLUME_INITIATOR=
 CEC_AUDIO_LOGICAL_ADDRESS=5
+CEC_SIMPLINK_ACK=0
 HDMI_ALSA_CARD_NAME=alsa_card.pci-0000_03_00.1
 HDMI_ALSA_CARD_NICK="HDA ATI HDMI"
 EXTERNAL_VOLUME_ROUTE=hdmi-output-0
@@ -527,7 +528,7 @@ Update user-level configuration:
 
 ```bash
 ~/.local/bin/steamos-cec-toolkitctl set-config '{"CEC_DEVICE":"/dev/cec0"}'
-~/.local/bin/steamos-cec-toolkitctl set-config '{"CEC_VOLUME_INITIATOR":"0","CEC_AUDIO_LOGICAL_ADDRESS":"5"}'
+~/.local/bin/steamos-cec-toolkitctl set-config '{"CEC_VOLUME_INITIATOR":"","CEC_AUDIO_LOGICAL_ADDRESS":"5"}'
 ~/.local/bin/steamos-cec-toolkitctl set-config '{"HDMI_ALSA_CARD_NAME":"alsa_card.pci-0000_03_00.1","EXTERNAL_VOLUME_ROUTE":"hdmi-output-0"}'
 ```
 
@@ -602,8 +603,9 @@ Then update `/etc/steamos-cec-toolkit.conf` if needed:
 
 ```bash
 CEC_DEVICE=/dev/cec0
-CEC_VOLUME_INITIATOR=0
+CEC_VOLUME_INITIATOR=
 CEC_AUDIO_LOGICAL_ADDRESS=5
+CEC_SIMPLINK_ACK=0
 HDMI_ALSA_CARD_NAME=alsa_card.pci-0000_03_00.1
 HDMI_ALSA_CARD_NICK="HDA ATI HDMI"
 EXTERNAL_VOLUME_ROUTE=hdmi-output-0
@@ -613,6 +615,12 @@ The toolkit is configurable, but not fully topology-agnostic yet. In
 particular, some receivers accept volume only from the TV logical address while
 others may accept it from the SteamOS playback address. HDMI/WirePlumber card
 matching can also vary by GPU, adapter, and distro image.
+
+Leave `CEC_VOLUME_INITIATOR` empty for the normal validated path where the
+kernel uses the SteamOS adapter's current logical address. Set it to `0` only
+for receivers or soundbars that require TV-originated volume commands. If there
+is no separate Audio System on the CEC bus and the TV renders audio itself, use
+`CEC_AUDIO_LOGICAL_ADDRESS=0`; LG TVs may also need `CEC_SIMPLINK_ACK=1`.
 
 ## Input Switching
 

@@ -110,10 +110,12 @@ CEC_AUDIO_LOGICAL_ADDRESS=5
 
 in `/etc/steamos-cec-toolkit.conf`.
 
-If your receiver accepts normal playback-device volume commands, try:
+If your receiver accepts normal playback-device volume commands, leave the
+initiator empty so the kernel uses the SteamOS adapter's current logical
+address and validates the message:
 
 ```bash
-CEC_VOLUME_INITIATOR=4
+CEC_VOLUME_INITIATOR=
 ```
 
 If it only accepts TV-originated volume commands, keep:
@@ -121,6 +123,86 @@ If it only accepts TV-originated volume commands, keep:
 ```bash
 CEC_VOLUME_INITIATOR=0
 ```
+
+## Volume Does Nothing on an LG TV With No Receiver
+
+This is a different failure than the receiver case above, with a different fix.
+
+Check topology:
+
+```bash
+cec-ctl -d /dev/cec0 --show-topology
+```
+
+If there is no `Audio System` device listed, the TV renders its own audio.
+Set:
+
+```bash
+CEC_AUDIO_LOGICAL_ADDRESS=0
+CEC_VOLUME_INITIATOR=
+```
+
+leaving `CEC_VOLUME_INITIATOR` empty so the kernel supplies the adapter's own
+logical address and validates the frame. If the TV's `Vendor ID` in the
+topology output is `0x00e091` (LG), also set:
+
+```bash
+CEC_SIMPLINK_ACK=1
+```
+
+LG TVs run a vendor extension called SIMPLINK on top of standard HDMI-CEC and
+gate `User Control Pressed` (the opcode volume/mute use) behind a SIMPLINK
+vendor-command handshake. Without it, the TV silently drops volume keys while
+continuing to answer unrelated CEC queries like power status normally, which
+makes it look like nothing is happening at all rather than failing loudly.
+
+Confirm with a bus capture. This needs root:
+
+```bash
+sudo cec-ctl -d /dev/cec0 -s --monitor-all --monitor-time 20 --show-raw --wall-clock
+```
+
+A `FEATURE_ABORT` reply to `VENDOR_COMMAND (0x89)` with payload `0x01` is the
+signature of a refused SIMPLINK handshake — the TV is trying to establish a
+SIMPLINK session and the connected device (previously this toolkit) is
+rejecting it.
+
+LG's SIMPLINK also only responds to an adapter that has announced a vendor
+ID. SteamOS's own `cecd.service` owns the adapter in the background and
+usually auto-matches the adapter's vendor ID to the connected TV's, but that
+auto-match is not guaranteed to have happened yet — most commonly right
+after boot or a fresh HDMI connect, before `cecd` has observed the TV on the
+bus. When `CEC_SIMPLINK_ACK=1`, the volume script checks for this itself
+(`cec-ctl -d "$CEC_DEVICE"`, looking for a `Vendor ID` line) and claims
+`CEC_SIMPLINK_VENDOR_ID` (default `0x00e091`, LG) only when it's actually
+missing, so this should self-heal without any action on your part. If
+volume still does nothing, confirm:
+
+```bash
+cec-ctl -d /dev/cec0 | grep "Vendor ID"
+```
+
+No output means the adapter has no vendor ID claimed. If it stays empty
+across repeated volume attempts, something is preventing the script's own
+claim from succeeding — check that `/usr/bin/cec-ctl` is reachable from the
+script's context (root, via the sudoers rule) and not just your shell.
+
+**While diagnosing manually, avoid running `cec-ctl --playback`,
+`--vendor-id`, `--clear`, or anything else that reclaims the adapter's
+logical address** in a tight loop, even though the script above does this
+safely on its own. Reclaiming the adapter races with `cecd`: it reacts by
+briefly resetting its own logical address and vendor ID before reasserting
+them, and while that race is in progress, volume commands from *either*
+side can transiently fail. `--show-topology` and a bare `cec-ctl -d
+/dev/cec0` are both read-only and always safe to run.
+
+If a transmit reports success but nothing happens and none of the above
+explains it, remember that `--raw-msg` (used only when `CEC_VOLUME_INITIATOR`
+is explicitly set to something other than `CEC_AUDIO_LOGICAL_ADDRESS`)
+suppresses all kernel-side validation of the frame. A transmit can exit 0
+while having sent a malformed or nonsensically-addressed message. Prefer
+leaving `CEC_VOLUME_INITIATOR` empty so the kernel validates every frame
+before it goes out.
 
 ## Audio Device Disappears
 

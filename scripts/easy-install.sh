@@ -276,10 +276,13 @@ if devices:
         print(f"  {device.get('label', device.get('logical_address', '?'))}")
 suggested = payload.get("suggested", {})
 if suggested:
+    initiator = suggested.get("CEC_VOLUME_INITIATOR", "")
+    initiator_label = initiator if initiator else "auto"
+    target = suggested.get("CEC_AUDIO_LOGICAL_ADDRESS", "0")
     print(
         "Suggested volume path: "
-        f"{suggested.get('CEC_VOLUME_INITIATOR', '0')} -> "
-        f"{suggested.get('CEC_AUDIO_LOGICAL_ADDRESS', '5')}"
+        f"{initiator_label} -> "
+        f"{target}"
     )
 PY
 else
