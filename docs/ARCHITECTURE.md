@@ -113,3 +113,8 @@ The optional before-sleep service writes:
 The optional TV standby monitor ignores TV standby events that occur right after
 this marker is written. This avoids treating a locally initiated sleep as a new
 external TV standby event.
+
+The before-sleep service defaults to sending HDMI-CEC Standby. If
+`CEC_SLEEP_TV_ACTION=inactive-source` is configured, it sends Inactive Source
+to the TV instead. That mode is intended for TVs that treat CEC Standby as a
+hard shutdown and cold-boot on the next wake.

@@ -421,6 +421,7 @@ function ConfigDetails({ status }: { status: Status | null }) {
   const initiator = configValueAllowEmpty(status, "CEC_VOLUME_INITIATOR", "");
   const audioTarget = configValue(status, "CEC_AUDIO_LOGICAL_ADDRESS", "0");
   const simplinkAck = configValue(status, "CEC_SIMPLINK_ACK", "0") === "1";
+  const sleepTvAction = configValue(status, "CEC_SLEEP_TV_ACTION", "standby");
   const cardName = configValue(status, "HDMI_ALSA_CARD_NAME", "alsa_card.pci-0000_03_00.1");
   const cardNick = configValue(status, "HDMI_ALSA_CARD_NICK", "HDA ATI HDMI");
   const route = configValue(status, "EXTERNAL_VOLUME_ROUTE", "hdmi-output-0");
@@ -431,6 +432,7 @@ function ConfigDetails({ status }: { status: Status | null }) {
       <div>Physical address: {physicalAddress}</div>
       <div>Volume path: {formatInitiator(initiator)} to {audioTarget}</div>
       {simplinkAck && <div>LG SIMPLINK handshake: enabled</div>}
+      <div>Sleep TV action: {sleepTvAction}</div>
       <div>Route: {route}</div>
       <div>HDMI card: {cardName} / {cardNick}</div>
     </div>
@@ -619,6 +621,7 @@ function Content() {
     "INPUT_INACTIVE_SUSPEND_DELAY_SECONDS",
     configValue(status, "INPUT_AWAY_SUSPEND_DELAY_SECONDS", "60"),
   );
+  const sleepTvAction = configValue(status, "CEC_SLEEP_TV_ACTION", "standby");
   const audioCardOptions = (audioDiscovery?.cards || []).map((card) => ({
     data: card.name,
     label: card.label,
@@ -632,6 +635,10 @@ function Content() {
     { data: "60", label: "1 minute" },
     { data: "120", label: "2 minutes" },
     { data: "300", label: "5 minutes" },
+  ];
+  const sleepTvActionOptions = [
+    { data: "standby", label: "Standby" },
+    { data: "inactive-source", label: "Inactive Source" },
   ];
 
   return (
@@ -698,8 +705,8 @@ function Content() {
         </PanelSectionRow>
         <PanelSectionRow>
           <ToggleField
-            label="SteamOS Sleep Turns Off TV"
-            description="Send TV standby before SteamOS sleeps or shuts down"
+            label="SteamOS Sleep Controls TV"
+            description="Send CEC on sleep/shutdown"
             checked={!!powerStandby?.is_enabled}
             disabled={busy || !status?.power_standby_helper_exists}
             onChange={(enabled: boolean) => void runAction(() => setSystemService("power-standby", enabled))}
@@ -796,6 +803,16 @@ function Content() {
             />
           </PanelSectionRow>
         )}
+        <PanelSectionRow>
+          <DropdownItem
+            label="Sleep TV Action"
+            description="Standby turns devices off; Inactive Source leaves them on"
+            rgOptions={sleepTvActionOptions}
+            selectedOption={sleepTvAction}
+            disabled={busy}
+            onChange={(option) => void runAction(() => setConfig({ CEC_SLEEP_TV_ACTION: String(option.data) }))}
+          />
+        </PanelSectionRow>
         <PanelSectionRow>
           <DropdownItem
             label="Volume Initiator"

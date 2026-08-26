@@ -13,11 +13,27 @@ fi
 
 STEAMOS_CEC_USER="${STEAMOS_CEC_USER:-deck}"
 STEAMOS_CEC_UID="$(id -u "$STEAMOS_CEC_USER")"
+USER_CONFIG="/home/$STEAMOS_CEC_USER/.config/steamos-cec-toolkit/config.conf"
+if [[ -r "$USER_CONFIG" ]]; then
+  # shellcheck disable=SC1090
+  source "$USER_CONFIG"
+fi
+
 CEC_DEVICE="${CEC_DEVICE:-/dev/cec0}"
 TV_LOGICAL_ADDRESS="${TV_LOGICAL_ADDRESS:-0}"
 CEC_PLAYBACK_LOGICAL_ADDRESS="${CEC_PLAYBACK_LOGICAL_ADDRESS:-4}"
+CEC_PHYSICAL_ADDRESS="${CEC_PHYSICAL_ADDRESS:-}"
+CEC_SLEEP_TV_ACTION="${CEC_SLEEP_TV_ACTION:-standby}"
 TV_STANDBY_SETTLE_SECONDS="${TV_STANDBY_SETTLE_SECONDS:-2}"
 INPUT_INACTIVE_SUSPEND_MARKER="/run/user/$STEAMOS_CEC_UID/steamos-cec-input-inactive-suspend"
+
+case "$CEC_SLEEP_TV_ACTION" in
+  standby|inactive-source) ;;
+  *)
+    echo "steamos-cec: unknown CEC_SLEEP_TV_ACTION '$CEC_SLEEP_TV_ACTION'; using standby"
+    CEC_SLEEP_TV_ACTION=standby
+    ;;
+esac
 
 touch /run/steamos-cec-local-suspend
 
@@ -55,6 +71,36 @@ send_raw_standby() {
     --custom-command cmd=0x36 || true
 }
 
+physical_address_payload() {
+  local physical="${CEC_PHYSICAL_ADDRESS:-}"
+  local a b c d
+  IFS=. read -r a b c d <<< "$physical"
+  if [[ ! "$a" =~ ^[0-9a-fA-F]$ || ! "$b" =~ ^[0-9a-fA-F]$ || ! "$c" =~ ^[0-9a-fA-F]$ || ! "$d" =~ ^[0-9a-fA-F]$ ]]; then
+    return 1
+  fi
+  printf '0x%02x:0x%02x\n' "$((16#$a * 16 + 16#$b))" "$((16#$c * 16 + 16#$d))"
+}
+
+send_inactive_source() {
+  local source="$1"
+  local payload
+
+  if [[ -z "$CEC_PHYSICAL_ADDRESS" ]]; then
+    echo "steamos-cec: CEC_PHYSICAL_ADDRESS is not configured; skipping inactive source"
+    return 0
+  fi
+
+  /usr/bin/cec-ctl -d "$CEC_DEVICE" -s --to "$TV_LOGICAL_ADDRESS" \
+    --inactive-source phys-addr="$CEC_PHYSICAL_ADDRESS" || true
+
+  if payload="$(physical_address_payload)"; then
+    sleep 0.5
+    /usr/bin/cec-ctl -d "$CEC_DEVICE" -s --raw-msg \
+      -f "$source" -t "$TV_LOGICAL_ADDRESS" \
+      --custom-command "cmd=0x9d,payload=$payload" || true
+  fi
+}
+
 input_inactive_suspend_in_progress() {
   [[ -e "$INPUT_INACTIVE_SUSPEND_MARKER" ]] || return 1
 
@@ -71,25 +117,33 @@ if input_inactive_suspend_in_progress; then
   exit 0
 fi
 
-echo "steamos-cec: sending TV standby before sleep/shutdown"
+echo "steamos-cec: running sleep/shutdown CEC action '$CEC_SLEEP_TV_ACTION'"
 
-run_as_user_bus busctl --user call \
-  com.steampowered.CecDaemon1 \
-  /com/steampowered/CecDaemon1/Daemon \
-  com.steampowered.CecDaemon1.Daemon1 \
-  Standby b true \
-  || true
+if [[ "$CEC_SLEEP_TV_ACTION" == "standby" ]]; then
+  run_as_user_bus busctl --user call \
+    com.steampowered.CecDaemon1 \
+    /com/steampowered/CecDaemon1/Daemon \
+    com.steampowered.CecDaemon1.Daemon1 \
+    Standby b true \
+    || true
 
-run_as_user_bus busctl --user call \
-  com.steampowered.CecDaemon1 \
-  /com/steampowered/CecDaemon1/Devices/Cec0 \
-  com.steampowered.CecDaemon1.CecDevice1 \
-  Standby y "$TV_LOGICAL_ADDRESS" \
-  || true
+  run_as_user_bus busctl --user call \
+    com.steampowered.CecDaemon1 \
+    /com/steampowered/CecDaemon1/Devices/Cec0 \
+    com.steampowered.CecDaemon1.CecDevice1 \
+    Standby y "$TV_LOGICAL_ADDRESS" \
+    || true
+fi
 
 if [[ -e "$CEC_DEVICE" ]]; then
   playback_logical_address="$(current_playback_logical_address)"
-  echo "steamos-cec: CEC standby source logical address $playback_logical_address"
+  echo "steamos-cec: CEC sleep action '$CEC_SLEEP_TV_ACTION' from logical address $playback_logical_address"
+
+  if [[ "$CEC_SLEEP_TV_ACTION" == "inactive-source" ]]; then
+    send_inactive_source "$playback_logical_address"
+    sleep "$TV_STANDBY_SETTLE_SECONDS"
+    exit 0
+  fi
 
   send_native_standby "$TV_LOGICAL_ADDRESS"
   sleep 0.25

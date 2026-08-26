@@ -86,6 +86,13 @@ TV_LOGICAL_ADDRESS=0
 CEC_PLAYBACK_LOGICAL_ADDRESS=4
 CEC_STANDBY_OPCODE=0x36
 
+# CEC action sent before SteamOS sleeps or shuts down when the system
+# power-standby service is enabled:
+#   standby         Send normal HDMI-CEC Standby. This turns off most TVs/AVRs.
+#   inactive-source Send Inactive Source instead. Useful for TVs that cold-boot
+#                   after CEC Standby, such as some Philips Android/Titan OS TVs.
+CEC_SLEEP_TV_ACTION=standby
+
 # Optional input inactive suspend service.
 # Suspends SteamOS after this CEC source is no longer active for the delay.
 INPUT_INACTIVE_SUSPEND_DELAY_SECONDS=60

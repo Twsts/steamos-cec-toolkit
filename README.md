@@ -733,7 +733,7 @@ INPUT_INACTIVE_SUSPEND_DELAY_SECONDS=60
 From the Decky plugin, enable `Input Inactive Suspends SteamOS` under Features. When
 enabled, use `Input Inactive Delay` under Configuration to choose the delay.
 
-## Optional SteamOS Sleep/Shutdown CEC Standby
+## Optional SteamOS Sleep/Shutdown TV Action
 
 Enable with:
 
@@ -741,12 +741,29 @@ Enable with:
 ./install.sh --enable-before-sleep
 ```
 
-This installs a system service that asks `cecd` to send TV standby before
+This installs a system service that sends a configured HDMI-CEC action before
 SteamOS sleeps or shuts down. It can be toggled from the Decky plugin or with:
 
 ```bash
 ~/.local/bin/steamos-cec-toolkitctl set-system-service power-standby on
 ```
+
+The default action is:
+
+```bash
+CEC_SLEEP_TV_ACTION=standby
+```
+
+This sends normal HDMI-CEC Standby and turns off most TVs/AVRs. Some Smart TVs,
+including some Philips Android/Titan OS models, cold-boot after receiving CEC
+Standby. For those TVs, use:
+
+```bash
+CEC_SLEEP_TV_ACTION=inactive-source
+```
+
+This sends HDMI-CEC Inactive Source instead of Standby. It tells the TV that the
+SteamOS source is no longer active without broadcasting a full power-off request.
 
 ## Optional Gamescope Recovery
 
