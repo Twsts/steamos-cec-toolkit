@@ -1,1 +1,1 @@
-SUBSYSTEM=="cec", TAG+="uaccess", RUN+="/var/lib/steamos-cec-toolkit/steamos-cec-permissions-apply"
+SUBSYSTEM=="cec", KERNEL=="cec[0-9]*", TAG+="uaccess", RUN+="/var/lib/steamos-cec-toolkit/steamos-cec-permissions-apply"

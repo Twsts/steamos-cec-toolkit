@@ -15,7 +15,7 @@ usage() {
 Usage: steamos-cec-toolkit-installer.sh [options]
 
 Options:
-  --verify    Run SteamOS atomic-update persistence verification when supported
+  --verify    Run atomic-update persistence verification when supported (SteamOS only)
   -h, --help  Show this help
 USAGE
 }
@@ -94,7 +94,7 @@ require_command() {
 }
 
 if [[ "$(id -u)" -eq 0 ]]; then
-  echo "Run this installer as the SteamOS desktop user, usually 'deck', not as root." >&2
+  echo "Run this installer as the normal desktop user, not as root." >&2
   exit 1
 fi
 
@@ -104,10 +104,10 @@ require_command install
 require_command systemctl
 require_command tar
 
-say "SteamOS CEC Toolkit installer"
-say "This installs the HDMI-CEC toolkit and can optionally install the Decky plugin for Game Mode."
+say "CEC Toolkit installer"
+say "This installs the HDMI-CEC toolkit and can optionally install the Decky plugin."
 say "You will be asked for sudo once or a few times while root-owned files are installed."
-say "The feature choices below can be changed later from the SteamOS CEC Decky plugin if you install it."
+say "The feature choices below can be changed later from the CEC Toolkit Decky plugin if you install it."
 say "If this is a reinstall, the defaults below use your current enabled/disabled feature state where it can be detected."
 
 install_decky_default=no
@@ -155,7 +155,7 @@ gamescope_recovery_default="$(service_default user steamos-cec-gamescope-recover
 if ask_yes_no "Enable Steam button/controller wake and input switching?" "$steam_button_default"; then
   enable_steam_button=1
 fi
-if ask_yes_no "Enable wake and input switching when SteamOS starts?" "$boot_wake_default"; then
+if ask_yes_no "Enable wake and input switching when the session starts?" "$boot_wake_default"; then
   enable_boot_wake=1
 fi
 if ask_yes_no "Enable TV standby suspends SteamOS?" "$tv_standby_default"; then

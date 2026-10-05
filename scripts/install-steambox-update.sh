@@ -1,6 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+if [[ -r /etc/os-release ]]; then
+  # shellcheck disable=SC1091
+  . /etc/os-release
+fi
+if [[ "${ID:-}" != "steamos" ]]; then
+  echo "This updater is SteamOS-specific and is not used on ${ID:-unknown}." >&2
+  exit 1
+fi
+
 DECK_USER="${DECK_USER:-deck}"
 DECK_HOME="${DECK_HOME:-/home/$DECK_USER}"
 PLUGIN_ZIP="${PLUGIN_ZIP:-$DECK_HOME/steamos-cec-toolkit-decky.zip}"

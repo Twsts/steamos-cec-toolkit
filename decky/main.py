@@ -22,8 +22,10 @@ class Plugin:
                 "HOME": str(self._home),
                 "PATH": f"{self._home}/.local/bin:/usr/local/bin:/usr/bin:/bin",
                 "SYSTEMD_PAGER": "",
-                "XDG_RUNTIME_DIR": "/run/user/1000",
-                "DBUS_SESSION_BUS_ADDRESS": "unix:path=/run/user/1000/bus",
+                "XDG_RUNTIME_DIR": os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}"),
+                "DBUS_SESSION_BUS_ADDRESS": os.environ.get(
+                    "DBUS_SESSION_BUS_ADDRESS", f"unix:path=/run/user/{os.getuid()}/bus"
+                ),
             }
         )
         env.pop("LD_LIBRARY_PATH", None)

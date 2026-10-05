@@ -1,0 +1,11 @@
+[Unit]
+Description=HDMI-CEC ExternalVolume service
+After=pipewire.service
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/steamos-cec-external-volume
+Restart=on-failure
+
+[Install]
+WantedBy=default.target

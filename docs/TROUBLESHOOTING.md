@@ -68,7 +68,7 @@ Check capabilities:
 
 ```bash
 varlinkctl call \
-  unix:/run/user/1000/cec-audio-control/org.pipewire.ExternalVolume \
+  unix:/run/user/<uid>/steamos-cec-toolkit/org.pipewire.ExternalVolume \
   org.pipewire.ExternalVolume.GetCapabilities \
   '{"device":""}'
 ```

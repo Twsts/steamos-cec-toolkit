@@ -26,7 +26,7 @@ WirePlumber attaches an ExternalVolume socket to the HDMI ALSA card when:
 
 ```text
 monitor.alsa.enable-external-volume-control = true
-api.alsa.external-volume-control = "unix:/run/user/1000/cec-audio-control/org.pipewire.ExternalVolume"
+api.alsa.external-volume-control = "unix:/run/user/<uid>/steamos-cec-toolkit/org.pipewire.ExternalVolume"
 steamos.supports-hdmi-cec = true
 ```
 

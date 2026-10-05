@@ -1,7 +1,6 @@
 [Unit]
 Description=Suspend SteamOS when HDMI-CEC input switches away
-After=cecd.service
-Wants=cecd.service
+After=default.target
 
 [Service]
 Type=simple

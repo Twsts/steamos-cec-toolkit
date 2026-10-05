@@ -4,6 +4,8 @@ set -euo pipefail
 PROJECT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 CONFIG_FILE="${STEAMOS_CEC_CONFIG:-/etc/steamos-cec-toolkit.conf}"
 INSTALL_USER="$(id -un)"
+source "$PROJECT_DIR/lib/platform.sh"
+PLATFORM_ID="$(cec_platform_id)"
 
 enable_external_volume=1
 enable_steam_button=0
@@ -31,7 +33,7 @@ Options:
   --enable-usb-wake             Enable USB wake for Bluetooth/controller receivers (system service)
   --no-external-volume          Do not install the PipeWire ExternalVolume integration
   --no-restart                  Install files but do not restart user services
-  --verify                      Verify SteamOS atomic-update persistence after install when supported
+  --verify                      Verify atomic-update persistence when supported (SteamOS only)
   -h, --help                    Show this help
 
 Environment:
@@ -58,7 +60,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ "$(id -u)" -eq 0 ]]; then
-  echo "Run this installer as the SteamOS desktop user, usually 'deck', not as root." >&2
+  echo "Run this installer as the normal desktop user, not as root." >&2
   exit 1
 fi
 
@@ -83,6 +85,10 @@ systemctl_user_timeout() {
 verify_atomic_update_persistence() {
   local holo_sync="/usr/lib/holo/holo-sync-var"
 
+  if ! cec_is_steamos; then
+    echo "Atomic-update verification skipped on $PLATFORM_ID (not SteamOS)."
+    return 0
+  fi
   if [[ ! -x "$holo_sync" ]]; then
     echo "SteamOS atomic-update verification skipped: $holo_sync is not available."
     return 0
@@ -104,14 +110,17 @@ require_command python3
 
 if [[ "$enable_external_volume" -eq 1 ]]; then
   require_command cec-ctl
-  require_command varlinkctl
+fi
+
+if [[ "$PLATFORM_ID" != "steamos" && "$PLATFORM_ID" != "cachyos" && "$PLATFORM_ID" != "arch" ]]; then
+  echo "warning: unrecognized distribution '$PLATFORM_ID'; continuing with generic Linux paths." >&2
 fi
 
 if [[ ! -f "$CONFIG_FILE" ]]; then
   echo "Installing default config at $CONFIG_FILE"
   sudo install -D -m 0644 "$PROJECT_DIR/config/steamos-cec-toolkit.conf.example" "$CONFIG_FILE"
   sudo sed -i "s|^STEAMOS_CEC_USER=.*|STEAMOS_CEC_USER=$INSTALL_USER|" "$CONFIG_FILE"
-  mapfile -t detected_cec_devices < <(compgen -G "/dev/cec*" | sort)
+  mapfile -t detected_cec_devices < <(find /dev -maxdepth 1 -type c -name 'cec[0-9]*' -print | sort)
   if [[ "${#detected_cec_devices[@]}" -eq 1 && "${detected_cec_devices[0]}" != "/dev/cec0" ]]; then
     echo "Using detected CEC adapter ${detected_cec_devices[0]} in $CONFIG_FILE"
     sudo sed -i "s|^CEC_DEVICE=.*|CEC_DEVICE=${detected_cec_devices[0]}|" "$CONFIG_FILE"
@@ -193,8 +202,13 @@ sudo install -D -m 0644 "$PROJECT_DIR/systemd/system/steamos-cec-resume-wake.ser
   /etc/systemd/system/steamos-cec-resume-wake.service
 sudo install -D -m 0644 "$PROJECT_DIR/udev/70-steamos-cec-toolkit.rules" \
   /etc/udev/rules.d/70-steamos-cec-toolkit.rules
-sudo install -D -m 0644 "$PROJECT_DIR/config/atomic-update-steamos-cec-toolkit.conf" \
-  /etc/atomic-update.conf.d/steamos-cec-toolkit.conf
+if cec_is_steamos; then
+  sudo install -D -m 0644 "$PROJECT_DIR/config/atomic-update-steamos-cec-toolkit.conf" \
+    /etc/atomic-update.conf.d/steamos-cec-toolkit.conf
+else
+  echo "Skipping SteamOS atomic-update configuration on $PLATFORM_ID."
+  sudo rm -f /etc/atomic-update.conf.d/steamos-cec-toolkit.conf
+fi
 
 echo "Configuring sudo permissions"
 sudoers_tmp="$(mktemp)"
@@ -210,13 +224,15 @@ rm -f "$sudoers_tmp"
 
 if [[ "$enable_external_volume" -eq 1 ]]; then
   echo "Configuring CEC volume buttons"
-  install -d "$HOME/.config/systemd/user/cec-audio-control.service.d"
-  install -m 0644 "$PROJECT_DIR/systemd/user/cec-audio-control.service.d/override.conf" \
-    "$HOME/.config/systemd/user/cec-audio-control.service.d/override.conf"
+  install -m 0644 "$PROJECT_DIR/systemd/user/steamos-cec-external-volume.service" \
+    "$HOME/.config/systemd/user/steamos-cec-external-volume.service"
+  install -m 0644 "$PROJECT_DIR/systemd/user/steamos-cec-external-volume.socket" \
+    "$HOME/.config/systemd/user/steamos-cec-external-volume.socket"
 
   install -d "$HOME/.config/wireplumber/wireplumber.conf.d"
   sed \
     -e "s|@HDMI_ALSA_CARD_NAME@|$HDMI_ALSA_CARD_NAME|g" \
+    -e "s|@CEC_EXTERNAL_VOLUME_SOCKET@|/run/user/$(id -u)/steamos-cec-toolkit/org.pipewire.ExternalVolume|g" \
     "$PROJECT_DIR/wireplumber/99-steamos-cec-external-volume.conf.in" \
     > "$HOME/.config/wireplumber/wireplumber.conf.d/99-steamos-cec-external-volume.conf"
 fi
@@ -233,6 +249,10 @@ install -m 0644 "$PROJECT_DIR/systemd/user/steamos-cec-input-away-suspend.servic
   "$HOME/.config/systemd/user/steamos-cec-input-away-suspend.service"
 install -m 0644 "$PROJECT_DIR/systemd/user/steamos-cec-gamescope-recovery.service" \
   "$HOME/.config/systemd/user/steamos-cec-gamescope-recovery.service"
+if [[ "$enable_external_volume" -eq 1 ]]; then
+  systemctl --user daemon-reload
+  systemctl --user enable --now steamos-cec-external-volume.socket
+fi
 
 if [[ "$enable_tv_standby" -eq 1 || "$enable_input_away_suspend" -eq 1 || "$enable_gamescope_recovery" -eq 1 ]]; then
   if ! python3 -c 'import dbus_next' >/dev/null 2>&1; then
@@ -247,7 +267,11 @@ sudo systemctl daemon-reload
 sudo udevadm control --reload-rules || true
 sudo /var/lib/steamos-cec-toolkit/steamos-cec-permissions-apply || true
 sudo systemctl enable --now steamos-cec-permissions.service
-systemctl --user restart cecd.service 2>/dev/null || true
+if cec_optional_user_service_available cecd.service; then
+  systemctl --user restart cecd.service
+else
+  echo "warning: optional cecd.service is unavailable; using cec-ctl/raw-message fallbacks." >&2
+fi
 
 echo "Applying selected feature services"
 if [[ "$enable_steam_button" -eq 1 ]]; then
@@ -264,7 +288,11 @@ if [[ "$enable_input_away_suspend" -eq 1 ]]; then
   systemctl --user enable --now steamos-cec-input-away-suspend.service
 fi
 if [[ "$enable_gamescope_recovery" -eq 1 ]]; then
-  systemctl --user enable --now steamos-cec-gamescope-recovery.service
+  if command -v gamescope >/dev/null 2>&1 || systemctl --user cat gamescope-session.target >/dev/null 2>&1; then
+    systemctl --user enable --now steamos-cec-gamescope-recovery.service
+  else
+    echo "warning: Gamescope was not detected; leaving Gamescope recovery disabled." >&2
+  fi
 fi
 if [[ "$enable_before_sleep" -eq 1 ]]; then
   sudo /var/lib/steamos-cec-toolkit/steamos-cec-power-standby-control on
@@ -279,11 +307,11 @@ fi
 if [[ "$restart_services" -eq 1 ]]; then
   if [[ "$enable_external_volume" -eq 1 ]]; then
     echo "Restarting CEC audio socket"
-    systemctl --user stop cec-audio-control.service 2>/dev/null || true
-    systemctl --user start cec-audio-control.socket 2>/dev/null || true
+    systemctl --user stop steamos-cec-external-volume.service 2>/dev/null || true
+    systemctl --user start steamos-cec-external-volume.socket 2>/dev/null || true
     echo "Restarting WirePlumber audio session"
     if ! systemctl_user_timeout 20 restart wireplumber.service; then
-      echo "warning: WirePlumber restart did not complete. Reboot if SteamOS volume buttons do not update." >&2
+      echo "warning: WirePlumber restart did not complete. Reboot if CEC volume buttons do not update." >&2
     fi
   fi
 fi
@@ -293,10 +321,10 @@ if [[ "$verify_atomic_update" -eq 1 ]]; then
 fi
 
 echo
-echo "Installed SteamOS CEC Toolkit."
+echo "Installed CEC Toolkit for $PLATFORM_ID."
 echo "Config: $CONFIG_FILE"
 echo
 echo "Quick checks:"
 echo "  ~/.local/bin/steamos-cec-volume up"
-echo "  varlinkctl call unix:/run/user/1000/cec-audio-control/org.pipewire.ExternalVolume org.pipewire.ExternalVolume.GetCapabilities '{\"device\":\"\"}'"
+echo "  varlinkctl call unix:/run/user/$(id -u)/steamos-cec-toolkit/org.pipewire.ExternalVolume org.pipewire.ExternalVolume.GetCapabilities '{\"device\":\"\"}'"
 echo "  wpctl status"

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Control/status helper for SteamOS CEC Toolkit and Decky UI."""
+"""Control/status helper for the CEC Toolkit and Decky UI."""
 
 from __future__ import annotations
 
@@ -16,6 +16,7 @@ from typing import Any
 SYSTEM_CONFIG_FILE = Path(os.environ.get("STEAMOS_CEC_CONFIG", "/etc/steamos-cec-toolkit.conf"))
 USER_CONFIG_FILE = Path.home() / ".config/steamos-cec-toolkit/config.conf"
 DISCOVERY_CACHE_FILE = Path.home() / ".config/steamos-cec-toolkit/cec-devices.json"
+CEC_DEVICE_DIRECTORY = Path(os.environ.get("CEC_DEVICE_DIRECTORY", "/dev"))
 CONFIG_FILE = USER_CONFIG_FILE if USER_CONFIG_FILE.exists() else SYSTEM_CONFIG_FILE
 ROOT_HELPER = Path("/var/lib/steamos-cec-toolkit/steamos-cec-volume-raw")
 DEBUG_HELPER = Path("/var/lib/steamos-cec-toolkit/steamos-cec-debug-monitor")
@@ -42,13 +43,14 @@ WIREPLUMBER_CONFIG_ALIASES = (
     Path.home() / ".config/wireplumber/wireplumber.conf.d/99-cec-external-volume.conf",
 )
 CEC_SERVICE_OVERRIDE = (
-    Path.home()
-    / ".config/systemd/user/cec-audio-control.service.d/override.conf"
+    Path.home() / ".config/systemd/user/steamos-cec-external-volume.service"
 )
-CEC_SERVICE_OVERRIDE_CONTENT = """[Service]
-ExecStart=
-ExecStart=%h/.local/bin/steamos-cec-external-volume
-"""
+CEC_EXTERNAL_VOLUME_SOCKET = Path(
+    os.environ.get(
+        "CEC_EXTERNAL_VOLUME_SOCKET",
+        f"/run/user/{os.getuid()}/steamos-cec-toolkit/org.pipewire.ExternalVolume",
+    )
+)
 WIREPLUMBER_CONFIG_TEMPLATE = """# SteamOS CEC Toolkit: enable PipeWire ExternalVolume for HDMI CEC.
 
 context.properties = {
@@ -67,8 +69,8 @@ monitor.alsa.rules = [
         device.description = "HDMI / DisplayPort"
         api.acp.disable-pro-audio = true
         device.routes.default-sink-volume = 1.0
-        api.alsa.external-volume-control = "unix:/run/user/1000/cec-audio-control/org.pipewire.ExternalVolume"
-        steamos.supports-hdmi-cec = true
+        api.alsa.external-volume-control = "unix:@CEC_EXTERNAL_VOLUME_SOCKET@"
+        cec-toolkit.supports-hdmi-cec = true
       }
     }
   },
@@ -250,7 +252,7 @@ def valid_physical_address(value: str) -> bool:
 def discover_cec() -> dict[str, Any]:
     config = read_config()
     cec_device = config.get("CEC_DEVICE", "/dev/cec0")
-    available = sorted(str(path) for path in Path("/dev").glob("cec*"))
+    available = sorted(str(path) for path in CEC_DEVICE_DIRECTORY.glob("cec[0-9]*"))
     cec_path = Path(cec_device)
     if not cec_path.exists():
         if len(available) == 1:
@@ -648,8 +650,8 @@ def steam_hid_fallback_devices() -> list[dict[str, str]]:
 
 
 def external_volume_state() -> dict[str, Any]:
-    service = service_state("cec-audio-control.service")
-    socket = service_state("cec-audio-control.socket")
+    service = service_state("steamos-cec-external-volume.service")
+    socket = service_state("steamos-cec-external-volume.socket")
     config_exists = WIREPLUMBER_CONFIG.exists() or any(
         path.exists() for path in WIREPLUMBER_CONFIG_ALIASES
     )
@@ -657,7 +659,7 @@ def external_volume_state() -> dict[str, Any]:
         [
             "varlinkctl",
             "call",
-            "unix:/run/user/1000/cec-audio-control/org.pipewire.ExternalVolume",
+            f"unix:{CEC_EXTERNAL_VOLUME_SOCKET}",
             "org.pipewire.ExternalVolume.GetCapabilities",
             '{"device":""}',
         ]
@@ -698,9 +700,23 @@ def toolkit_version() -> str:
 
 def status() -> dict[str, Any]:
     config = read_config()
+    platform_id = "unknown"
+    try:
+        for line in Path("/etc/os-release").read_text(encoding="utf-8").splitlines():
+            if line.startswith("ID="):
+                platform_id = line.split("=", 1)[1].strip().strip('"')
+                break
+    except OSError:
+        pass
     return {
         "ok": True,
         "version": toolkit_version(),
+        "platform": {
+            "id": platform_id,
+            "is_steamos": platform_id == "steamos",
+            "cecd_available": systemctl_user("cat", "cecd.service")["ok"],
+            "atomic_update_available": Path("/usr/lib/holo/holo-sync-var").is_file(),
+        },
         "config_file": str(USER_CONFIG_FILE if USER_CONFIG_FILE.exists() else SYSTEM_CONFIG_FILE),
         "system_config_file": str(SYSTEM_CONFIG_FILE),
         "user_config_file": str(USER_CONFIG_FILE),
@@ -871,7 +887,8 @@ def repair_cec_permissions() -> dict[str, Any]:
         return payload
 
     result = run(["sudo", "-n", str(CEC_PERMISSIONS_HELPER)], timeout=15)
-    systemctl_user("restart", "cecd.service")
+    if systemctl_user("cat", "cecd.service")["ok"]:
+        systemctl_user("restart", "cecd.service")
     payload = status()
     payload["action"] = result
     if not result["ok"]:
@@ -935,8 +952,8 @@ def standby_tv() -> dict[str, Any]:
 
 
 def restart_external_volume() -> dict[str, Any]:
-    systemctl_user("stop", "cec-audio-control.service")
-    systemctl_user("start", "cec-audio-control.socket")
+    systemctl_user("stop", "steamos-cec-external-volume.service")
+    systemctl_user("start", "steamos-cec-external-volume.socket")
     systemctl_user("restart", "wireplumber.service")
     return status()
 
@@ -964,16 +981,15 @@ def write_external_volume_files() -> None:
     wireplumber_config = (
         WIREPLUMBER_CONFIG_TEMPLATE
         .replace("@HDMI_ALSA_CARD_NAME@", hdmi_alsa_card_name)
+        .replace("@CEC_EXTERNAL_VOLUME_SOCKET@", str(CEC_EXTERNAL_VOLUME_SOCKET))
     )
     WIREPLUMBER_CONFIG.parent.mkdir(parents=True, exist_ok=True)
     WIREPLUMBER_CONFIG.write_text(wireplumber_config, encoding="utf-8")
 
-    CEC_SERVICE_OVERRIDE.parent.mkdir(parents=True, exist_ok=True)
-    CEC_SERVICE_OVERRIDE.write_text(CEC_SERVICE_OVERRIDE_CONTENT, encoding="utf-8")
 
 
 def remove_external_volume_files() -> None:
-    for path in (WIREPLUMBER_CONFIG, *WIREPLUMBER_CONFIG_ALIASES, CEC_SERVICE_OVERRIDE):
+    for path in (WIREPLUMBER_CONFIG, *WIREPLUMBER_CONFIG_ALIASES):
         try:
             path.unlink()
         except FileNotFoundError:
@@ -985,17 +1001,17 @@ def set_external_volume(enabled: bool) -> dict[str, Any]:
         discover_audio()
         write_external_volume_files()
         systemctl_user("daemon-reload")
-        systemctl_user("stop", "cec-audio-control.service")
-        systemctl_user("start", "cec-audio-control.socket")
+        systemctl_user("stop", "steamos-cec-external-volume.service")
+        systemctl_user("start", "steamos-cec-external-volume.socket")
         systemctl_user("restart", "pipewire.service")
         systemctl_user("restart", "pipewire-pulse.service")
         systemctl_user("restart", "wireplumber.service")
-        systemctl_user("start", "cec-audio-control.socket")
+        systemctl_user("start", "steamos-cec-external-volume.socket")
     else:
         remove_external_volume_files()
         systemctl_user("daemon-reload")
-        systemctl_user("stop", "cec-audio-control.service")
-        systemctl_user("stop", "cec-audio-control.socket")
+        systemctl_user("stop", "steamos-cec-external-volume.service")
+        systemctl_user("stop", "steamos-cec-external-volume.socket")
         systemctl_user("restart", "wireplumber.service")
         systemctl_user("restart", "pipewire.service")
         systemctl_user("restart", "pipewire-pulse.service")

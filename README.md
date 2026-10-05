@@ -1,11 +1,11 @@
-# SteamOS CEC Toolkit
+# CEC Toolkit
 
 > Disclaimer: This is a community solution for DIY/self-installed SteamOS
 > machines, created with vibe-coding and Codex. It is not an official Valve
 > project, and is tested on one known-good HTPC setup: a Radeon 9070 XT system
 > with a UGREEN DisplayPort-to-HDMI CEC adapter exposing `/dev/cec0`.
 
-SteamOS CEC Toolkit adds living-room HDMI-CEC behavior to DIY SteamOS /
+CEC Toolkit adds living-room HDMI-CEC behavior to DIY SteamOS, CachyOS /
 Steam Machine / HTPC builds. It installs scripts, systemd units, and
 WirePlumber overrides so Game Mode can control the TV/AVR chain like a console.
 An optional Decky plugin provides a Game Mode control panel.
@@ -36,8 +36,30 @@ Features are configurable from the Decky plugin or from the
 `steamos-cec-toolkitctl` command-line helper after the toolkit has been
 installed.
 
-The project uses Valve's existing SteamOS CEC daemon (`cecd`) and PipeWire
-ExternalVolume plumbing.
+On SteamOS, the project can use Valve's existing CEC daemon (`cecd`). On
+CachyOS/Arch, `cecd`, `cec-audio-control`, and SteamOS atomic-update helpers are
+optional: the toolkit uses `cec-ctl` raw-message fallbacks, a self-contained
+PipeWire ExternalVolume service, and normal systemd/udev persistence.
+
+## CachyOS / Arch
+
+The installer detects CachyOS and Arch from `/etc/os-release`. It does not write
+SteamOS atomic-update configuration on those systems, and it warns when optional
+Steam/Game Mode services are unavailable. The core command-line functionality
+only requires `cec-ctl`, PipeWire/WirePlumber, systemd user services, and a CEC
+character device such as `/dev/cec0`.
+
+For the Radeon 9070 XT plus DP-to-HDMI adapter setup:
+
+```bash
+sudo pacman -S cec-utils pipewire wireplumber python
+bash <(curl -fsSL https://raw.githubusercontent.com/Twsts/steamos-cec-toolkit/main/scripts/easy-install.sh)
+```
+
+The installer discovers `/dev/cec*` devices and generates a per-user
+`steamos-cec-external-volume.socket` instead of requiring SteamOS's
+`cec-audio-control.socket`. Decky and Gamescope features remain optional and are
+only useful when their dependencies are installed.
 
 ## Screenshots
 

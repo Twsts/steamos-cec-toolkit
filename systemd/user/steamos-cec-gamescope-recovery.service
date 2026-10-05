@@ -1,7 +1,6 @@
 [Unit]
 Description=Recover Gamescope after HDMI-CEC source activation
-After=cecd.service gamescope-session.target
-Wants=cecd.service
+After=default.target gamescope-session.target
 
 [Service]
 Type=simple

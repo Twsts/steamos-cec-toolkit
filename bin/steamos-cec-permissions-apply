@@ -7,7 +7,11 @@ if [[ -r "$SYSTEM_CONFIG_FILE" ]]; then
   source "$SYSTEM_CONFIG_FILE"
 fi
 
-STEAMOS_CEC_USER="${STEAMOS_CEC_USER:-deck}"
+STEAMOS_CEC_USER="${STEAMOS_CEC_USER:-${SUDO_USER:-}}"
+if [[ -z "$STEAMOS_CEC_USER" ]]; then
+  echo "CEC user is not configured; set STEAMOS_CEC_USER in /etc/steamos-cec-toolkit.conf" >&2
+  exit 1
+fi
 
 user_home="$(getent passwd "$STEAMOS_CEC_USER" 2>/dev/null | cut -d: -f6 || true)"
 user_config_file="${user_home:-/home/$STEAMOS_CEC_USER}/.config/steamos-cec-toolkit/config.conf"

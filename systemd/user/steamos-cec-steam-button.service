@@ -1,7 +1,6 @@
 [Unit]
 Description=Wake TV and activate SteamOS HDMI-CEC source from controller Home/Guide button
-After=cecd.service
-Wants=cecd.service
+After=default.target
 
 [Service]
 Type=simple

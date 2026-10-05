@@ -357,8 +357,15 @@ def main() -> int:
             sock = listen_socket(args.listen)
             log(f"SteamOS CEC ExternalVolume listening at {args.listen}")
         else:
-            sock = activated_socket()
-            log("SteamOS CEC ExternalVolume started on systemd socket fd 3")
+            # The toolkit service uses a regular per-user socket on Arch/CachyOS.
+            # Keep socket activation support for SteamOS installations.
+            listen_path = os.environ.get("CEC_EXTERNAL_VOLUME_SOCKET")
+            if listen_path:
+                sock = listen_socket(listen_path)
+                log(f"CEC ExternalVolume listening at {listen_path}")
+            else:
+                sock = activated_socket()
+                log("CEC ExternalVolume started on systemd socket fd 3")
     except Exception as error:
         log(str(error))
         return 1

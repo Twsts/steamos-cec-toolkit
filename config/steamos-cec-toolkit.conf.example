@@ -1,4 +1,4 @@
-# SteamOS CEC Toolkit configuration.
+# CEC Toolkit configuration.
 #
 # Copy to /etc/steamos-cec-toolkit.conf or pass values as environment
 # variables when running install.sh.
@@ -7,7 +7,8 @@
 CEC_DEVICE=/dev/cec0
 CEC_PHYSICAL_ADDRESS=
 
-# SteamOS desktop user. Official Steam Deck/SteamOS images normally use deck.
+# Desktop user that owns the user-level services. The installer replaces this
+# default with the account that runs it, including on CachyOS/Arch.
 STEAMOS_CEC_USER=deck
 
 # Leave CEC_VOLUME_INITIATOR empty to let the kernel supply the adapter's own

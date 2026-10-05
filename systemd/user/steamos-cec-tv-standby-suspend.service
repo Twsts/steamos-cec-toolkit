@@ -1,7 +1,6 @@
 [Unit]
 Description=Suspend SteamOS when TV broadcasts HDMI-CEC standby
-After=cecd.service
-Wants=cecd.service
+After=default.target
 
 [Service]
 Type=simple

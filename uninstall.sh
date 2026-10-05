@@ -19,6 +19,8 @@ rm -f "$HOME/.config/systemd/user/steamos-cec-steam-button.service"
 rm -f "$HOME/.config/systemd/user/steamos-cec-tv-standby-suspend.service"
 rm -f "$HOME/.config/systemd/user/steamos-cec-input-away-suspend.service"
 rm -f "$HOME/.config/systemd/user/steamos-cec-gamescope-recovery.service"
+rm -f "$HOME/.config/systemd/user/steamos-cec-external-volume.service"
+rm -f "$HOME/.config/systemd/user/steamos-cec-external-volume.socket"
 rm -f "$HOME/.config/systemd/user/cec-audio-control.service.d/override.conf"
 rm -f "$HOME/.config/wireplumber/wireplumber.conf.d/99-steamos-cec-external-volume.conf"
 rm -f "$HOME/.local/bin/steamos-cec-volume"
@@ -30,8 +32,9 @@ rm -f "$HOME/.local/bin/steamos-cec-input-away-suspend"
 rm -f "$HOME/.local/bin/steamos-cec-gamescope-recovery"
 
 systemctl --user daemon-reload
+systemctl --user stop steamos-cec-external-volume.service 2>/dev/null || true
 systemctl --user stop cec-audio-control.service 2>/dev/null || true
-systemctl --user start cec-audio-control.socket 2>/dev/null || true
+systemctl --user start steamos-cec-external-volume.socket 2>/dev/null || true
 systemctl --user restart wireplumber.service 2>/dev/null || true
 
 sudo systemctl disable --now steamos-cec-before-sleep.service 2>/dev/null || true
