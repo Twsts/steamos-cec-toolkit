@@ -141,6 +141,7 @@ install -m 0755 "$PROJECT_DIR/bin/steamos-cec-toolkitctl" "$HOME/.local/bin/stea
 install -m 0755 "$PROJECT_DIR/bin/steamos-cec-external-volume" "$HOME/.local/bin/steamos-cec-external-volume"
 install -m 0755 "$PROJECT_DIR/bin/steamos-cec-boot-wake" "$HOME/.local/bin/steamos-cec-boot-wake"
 install -m 0755 "$PROJECT_DIR/bin/steamos-cec-steam-button" "$HOME/.local/bin/steamos-cec-steam-button"
+install -m 0755 "$PROJECT_DIR/bin/steamos-cec-remote-play-monitor" "$HOME/.local/bin/steamos-cec-remote-play-monitor"
 install -m 0755 "$PROJECT_DIR/bin/steamos-cec-tv-standby-suspend" \
   "$HOME/.local/bin/steamos-cec-tv-standby-suspend"
 install -m 0755 "$PROJECT_DIR/bin/steamos-cec-input-away-suspend" \
@@ -225,6 +226,8 @@ echo "Installing user services"
 install -d "$HOME/.config/systemd/user"
 install -m 0644 "$PROJECT_DIR/systemd/user/steamos-cec-steam-button.service" \
   "$HOME/.config/systemd/user/steamos-cec-steam-button.service"
+install -m 0644 "$PROJECT_DIR/systemd/user/steamos-cec-remote-play-monitor.service" \
+  "$HOME/.config/systemd/user/steamos-cec-remote-play-monitor.service"
 install -m 0644 "$PROJECT_DIR/systemd/user/steamos-cec-boot-wake.service" \
   "$HOME/.config/systemd/user/steamos-cec-boot-wake.service"
 install -m 0644 "$PROJECT_DIR/systemd/user/steamos-cec-tv-standby-suspend.service" \
@@ -254,6 +257,11 @@ if [[ "$enable_steam_button" -eq 1 ]]; then
   systemctl --user enable --now steamos-cec-steam-button.service
   sudo systemctl enable steamos-cec-resume-wake.service
 fi
+case "${REMOTE_PLAY_SUPPRESS_CEC:-0}" in
+  1|true|True|yes)
+    systemctl --user enable --now steamos-cec-remote-play-monitor.service
+    ;;
+esac
 if [[ "$enable_boot_wake" -eq 1 ]]; then
   systemctl --user enable steamos-cec-boot-wake.service
 fi

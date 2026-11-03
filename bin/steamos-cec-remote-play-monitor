@@ -1,0 +1,110 @@
+#!/usr/bin/env python3
+"""Track Steam Remote Play sessions for conditional HDMI-CEC activation."""
+
+from __future__ import annotations
+
+import logging
+import os
+import re
+import time
+from pathlib import Path
+
+
+POLL_SECONDS = 1.0
+RUNTIME_DIR = Path(os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}"))
+ACTIVE_MARKER = RUNTIME_DIR / "steamos-cec-remote-play-active"
+STREAM_LOG = Path.home() / ".local/share/Steam/logs/streaming_log.txt"
+START_MARKER = re.compile(br">>> Starting (?:desktop|game) stream")
+STOP_MARKER = re.compile(br">>> Stopped (?:desktop|game) stream")
+
+logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+LOG = logging.getLogger("steamos-cec-remote-play-monitor")
+
+
+def set_active(active: bool) -> None:
+    if active:
+        try:
+            ACTIVE_MARKER.write_text("Steam Remote Play active\n", encoding="utf-8")
+        except OSError as error:
+            LOG.warning("Cannot write Remote Play state marker: %s", error)
+        return
+
+    try:
+        ACTIVE_MARKER.unlink()
+    except FileNotFoundError:
+        pass
+    except OSError as error:
+        LOG.warning("Cannot remove Remote Play state marker: %s", error)
+
+
+def state_from_log(data: bytes) -> bool | None:
+    events = [(match.start(), True) for match in START_MARKER.finditer(data)]
+    events.extend((match.start(), False) for match in STOP_MARKER.finditer(data))
+    if not events:
+        return None
+    return sorted(events)[-1][1]
+
+
+def main() -> None:
+    active = False
+    position = 0
+    inode: int | None = None
+    last_missing_log = 0.0
+
+    try:
+        set_active(False)
+        while True:
+            try:
+                stat = STREAM_LOG.stat()
+            except FileNotFoundError:
+                if time.monotonic() - last_missing_log >= 60:
+                    LOG.info("Waiting for Steam Remote Play log at %s", STREAM_LOG)
+                    last_missing_log = time.monotonic()
+                if active:
+                    active = False
+                    set_active(False)
+                time.sleep(POLL_SECONDS)
+                continue
+
+            if inode != stat.st_ino or stat.st_size < position:
+                inode = stat.st_ino
+                position = 0
+                try:
+                    data = STREAM_LOG.read_bytes()
+                except OSError as error:
+                    LOG.warning("Cannot read Steam Remote Play log: %s", error)
+                    time.sleep(POLL_SECONDS)
+                    continue
+                position = len(data)
+                detected_active = state_from_log(data)
+                if detected_active is not None and detected_active != active:
+                    active = detected_active
+                    set_active(active)
+                    LOG.info("Steam Remote Play is %s", "active" if active else "inactive")
+            elif stat.st_size > position:
+                try:
+                    with STREAM_LOG.open("rb") as file:
+                        file.seek(position)
+                        data = file.read()
+                except OSError as error:
+                    LOG.warning("Cannot read Steam Remote Play log updates: %s", error)
+                    time.sleep(POLL_SECONDS)
+                    continue
+                position += len(data)
+                detected_active = state_from_log(data)
+                if detected_active is not None and detected_active != active:
+                    active = detected_active
+                    set_active(active)
+                    LOG.info("Steam Remote Play is %s", "active" if active else "inactive")
+
+            if active:
+                # A stale marker is ignored by the CEC helpers, so refresh it
+                # while the session remains active.
+                set_active(True)
+            time.sleep(POLL_SECONDS)
+    finally:
+        set_active(False)
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,11 @@
+[Unit]
+Description=Track Steam Remote Play sessions for HDMI-CEC input switching
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/steamos-cec-remote-play-monitor
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target

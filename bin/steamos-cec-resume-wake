@@ -25,6 +25,8 @@ CEC_RESUME_CECD_SETTLE_SECONDS="${CEC_RESUME_CECD_SETTLE_SECONDS:-3}"
 CEC_RESUME_RESTART_CECD="${CEC_RESUME_RESTART_CECD:-1}"
 CEC_LOGICAL_ADDRESS_WAIT_SECONDS="${CEC_LOGICAL_ADDRESS_WAIT_SECONDS:-12}"
 CEC_DEVICE_WAIT_SECONDS="${CEC_DEVICE_WAIT_SECONDS:-12}"
+REMOTE_PLAY_SUPPRESS_CEC="${REMOTE_PLAY_SUPPRESS_CEC:-0}"
+REMOTE_PLAY_MARKER_MAX_AGE_SECONDS="${REMOTE_PLAY_MARKER_MAX_AGE_SECONDS:-5}"
 STEAM_BUTTON_UNIT="/home/$STEAMOS_CEC_USER/.config/systemd/user/default.target.wants/steamos-cec-steam-button.service"
 STEAMOS_CEC_UID="$(id -u "$STEAMOS_CEC_USER" 2>/dev/null || printf '')"
 
@@ -64,6 +66,20 @@ configured_logical_address() {
 
 controller_wake_enabled() {
   [[ -e "$STEAM_BUTTON_UNIT" ]]
+}
+
+remote_play_is_active() {
+  case "$REMOTE_PLAY_SUPPRESS_CEC" in
+    1|true|True|yes) ;;
+    *) return 1 ;;
+  esac
+
+  local marker="/run/user/$STEAMOS_CEC_UID/steamos-cec-remote-play-active" modified now
+  [[ -n "$STEAMOS_CEC_UID" && -f "$marker" ]] || return 1
+  modified="$(stat -c %Y "$marker" 2>/dev/null || true)"
+  [[ "$modified" =~ ^[0-9]+$ ]] || return 1
+  now="$(date +%s)"
+  (( now - modified <= REMOTE_PLAY_MARKER_MAX_AGE_SECONDS ))
 }
 
 user_command() {
@@ -227,6 +243,11 @@ send_wake_attempt() {
 main() {
   if ! controller_wake_enabled; then
     log "controller wake/input switching is disabled; skipping resume wake"
+    return 0
+  fi
+
+  if remote_play_is_active; then
+    log "Steam Remote Play is active; skipping resume wake/input activation"
     return 0
   fi
 

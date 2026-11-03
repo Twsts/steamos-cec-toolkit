@@ -61,6 +61,7 @@ for user_script in \
   steamos-cec-external-volume \
   steamos-cec-boot-wake \
   steamos-cec-steam-button \
+  steamos-cec-remote-play-monitor \
   steamos-cec-tv-standby-suspend \
   steamos-cec-input-away-suspend \
   steamos-cec-gamescope-recovery
@@ -74,6 +75,7 @@ done
 for user_unit in \
   steamos-cec-boot-wake.service \
   steamos-cec-steam-button.service \
+  steamos-cec-remote-play-monitor.service \
   steamos-cec-tv-standby-suspend.service \
   steamos-cec-input-away-suspend.service \
   steamos-cec-gamescope-recovery.service
@@ -183,6 +185,7 @@ chmod -R a+rX "$PLUGIN_DIR/steamos-cec-toolkit"
 run_user_systemctl daemon-reload
 run_user_systemctl try-restart steamos-cec-boot-wake.service || true
 run_user_systemctl try-restart steamos-cec-steam-button.service || true
+run_user_systemctl try-restart steamos-cec-remote-play-monitor.service || true
 run_user_systemctl try-restart steamos-cec-input-away-suspend.service || true
 run_user_systemctl try-restart steamos-cec-gamescope-recovery.service || true
 

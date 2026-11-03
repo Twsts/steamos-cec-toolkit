@@ -94,6 +94,7 @@ wireplumber.settings {
 USER_SERVICES = {
     "boot-wake": "steamos-cec-boot-wake.service",
     "steam-button": "steamos-cec-steam-button.service",
+    "remote-play-monitor": "steamos-cec-remote-play-monitor.service",
     "tv-standby": "steamos-cec-tv-standby-suspend.service",
     "input-away-suspend": "steamos-cec-input-away-suspend.service",
     "gamescope-recovery": "steamos-cec-gamescope-recovery.service",
@@ -191,6 +192,7 @@ def write_user_config(updates: dict[str, str]) -> None:
         "EXTERNAL_VOLUME_ROUTE",
         "CONTROLLER_WAKE_GENERIC_INPUT",
         "CONTROLLER_WAKE_STEAM_HID",
+        "REMOTE_PLAY_SUPPRESS_CEC",
         "INPUT_INACTIVE_SUSPEND_DELAY_SECONDS",
         "INPUT_AWAY_SUSPEND_DELAY_SECONDS",
     }
@@ -800,6 +802,17 @@ def set_config(updates: dict[str, str]) -> dict[str, Any]:
         or "INPUT_AWAY_SUSPEND_DELAY_SECONDS" in updates
     ):
         systemctl_user("try-restart", USER_SERVICES["input-away-suspend"])
+    if "REMOTE_PLAY_SUPPRESS_CEC" in updates:
+        enabled = updates["REMOTE_PLAY_SUPPRESS_CEC"] in {"1", "true", "True", "yes"}
+        monitor = USER_SERVICES["remote-play-monitor"]
+        result = systemctl_user("enable" if enabled else "disable", "--now", monitor)
+        if not result["ok"]:
+            payload = status()
+            payload["action"] = result
+            payload["ok"] = False
+            payload["error"] = result["stdout"] or "Remote Play monitor toggle failed"
+            return payload
+        systemctl_user("try-restart", USER_SERVICES["steam-button"])
     payload = status()
     payload["action"] = {"ok": True, "returncode": 0, "stdout": str(USER_CONFIG_FILE)}
     return payload

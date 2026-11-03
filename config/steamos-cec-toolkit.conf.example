@@ -48,6 +48,11 @@ EXTERNAL_VOLUME_ROUTE=hdmi-output-0
 # Steam HID support keeps the original Steam Controller fallback below.
 CONTROLLER_WAKE_GENERIC_INPUT=1
 CONTROLLER_WAKE_STEAM_HID=1
+# Suppress automatic CEC wake/input activation while Steam Remote Play is
+# actively streaming from this PC. The monitor reads Steam's local streaming
+# session log; physical controller input and Gamescope Recovery work normally
+# outside a stream.
+REMOTE_PLAY_SUPPRESS_CEC=0
 CONTROLLER_WAKE_RESUME_DELAY_SECONDS=2
 STEAM_BUTTON_HID_ID=0003:000028DE:00001304
 STEAM_BUTTON_EXCLUDED_PHYS=input6

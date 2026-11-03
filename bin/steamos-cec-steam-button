@@ -49,6 +49,8 @@ CEC_LOGICAL_ADDRESS_WAIT_SECONDS = 12.0
 CEC_WAKE_RETRY_DELAYS = (0, 2, 3, 5, 8)
 RUNTIME_DIR = Path(os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}"))
 CEC_ACTIVATION_MARKER = RUNTIME_DIR / "steamos-cec-activation-requested"
+REMOTE_PLAY_MARKER = RUNTIME_DIR / "steamos-cec-remote-play-active"
+REMOTE_PLAY_MARKER_MAX_AGE_SECONDS = 5.0
 
 INPUT_EVENT = struct.Struct("llHHI")
 EV_KEY = 0x01
@@ -123,6 +125,7 @@ CONFIG = read_config(os.environ.get("STEAMOS_CEC_CONFIG", DEFAULT_CONFIG))
 STEAMOS_CEC_USER = CONFIG.get("STEAMOS_CEC_USER", "deck")
 USER_CONFIG = f"/home/{STEAMOS_CEC_USER}/.config/steamos-cec-toolkit/config.conf"
 CONFIG.update(read_config(USER_CONFIG))
+REMOTE_PLAY_SUPPRESS_CEC = CONFIG.get("REMOTE_PLAY_SUPPRESS_CEC", "0") in {"1", "true", "True", "yes"}
 HID_ID = CONFIG.get("STEAM_BUTTON_HID_ID", "0003:000028DE:00001304")
 EXCLUDED_PHYS = CONFIG.get("STEAM_BUTTON_EXCLUDED_PHYS", "input6")
 REPORT_ID = int(CONFIG.get("STEAM_BUTTON_REPORT_ID", "0x45"), 0)
@@ -436,7 +439,20 @@ def mark_cec_activation_requested(reason: str) -> None:
         LOG.warning("Cannot write CEC activation marker: %s", error)
 
 
+def remote_play_is_active() -> bool:
+    if not REMOTE_PLAY_SUPPRESS_CEC:
+        return False
+    try:
+        return time.time() - REMOTE_PLAY_MARKER.stat().st_mtime <= REMOTE_PLAY_MARKER_MAX_AGE_SECONDS
+    except OSError:
+        return False
+
+
 def activate_source(reason: str) -> None:
+    if remote_play_is_active():
+        LOG.info("Steam Remote Play is active; skipping CEC wake/input activation (%s)", reason)
+        return
+
     with ACTIVATION_LOCK:
         was_active = source_is_active()
         if was_active:

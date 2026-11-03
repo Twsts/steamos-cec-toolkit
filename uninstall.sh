@@ -11,11 +11,13 @@ elif [[ $# -gt 0 ]]; then
 fi
 
 systemctl --user disable --now steamos-cec-steam-button.service 2>/dev/null || true
+systemctl --user disable --now steamos-cec-remote-play-monitor.service 2>/dev/null || true
 systemctl --user disable --now steamos-cec-tv-standby-suspend.service 2>/dev/null || true
 systemctl --user disable --now steamos-cec-input-away-suspend.service 2>/dev/null || true
 systemctl --user disable --now steamos-cec-gamescope-recovery.service 2>/dev/null || true
 
 rm -f "$HOME/.config/systemd/user/steamos-cec-steam-button.service"
+rm -f "$HOME/.config/systemd/user/steamos-cec-remote-play-monitor.service"
 rm -f "$HOME/.config/systemd/user/steamos-cec-tv-standby-suspend.service"
 rm -f "$HOME/.config/systemd/user/steamos-cec-input-away-suspend.service"
 rm -f "$HOME/.config/systemd/user/steamos-cec-gamescope-recovery.service"
@@ -25,6 +27,7 @@ rm -f "$HOME/.local/bin/steamos-cec-volume"
 rm -f "$HOME/.local/bin/steamos-cec-toolkitctl"
 rm -f "$HOME/.local/bin/steamos-cec-external-volume"
 rm -f "$HOME/.local/bin/steamos-cec-steam-button"
+rm -f "$HOME/.local/bin/steamos-cec-remote-play-monitor"
 rm -f "$HOME/.local/bin/steamos-cec-tv-standby-suspend"
 rm -f "$HOME/.local/bin/steamos-cec-input-away-suspend"
 rm -f "$HOME/.local/bin/steamos-cec-gamescope-recovery"

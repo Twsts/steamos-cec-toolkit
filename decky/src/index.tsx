@@ -622,6 +622,7 @@ function Content() {
     configValue(status, "INPUT_AWAY_SUSPEND_DELAY_SECONDS", "60"),
   );
   const sleepTvAction = configValue(status, "CEC_SLEEP_TV_ACTION", "standby");
+  const remotePlaySuppressCec = configValue(status, "REMOTE_PLAY_SUPPRESS_CEC", "0") === "1";
   const audioCardOptions = (audioDiscovery?.cards || []).map((card) => ({
     data: card.name,
     label: card.label,
@@ -678,6 +679,15 @@ function Content() {
         </PanelSectionRow>
         <PanelSectionRow>
           <ToggleField
+            label="Remote Play Protection"
+            description="Suppress toolkit CEC wake and Gamescope recovery while Steam Remote Play is active"
+            checked={remotePlaySuppressCec}
+            disabled={busy || !status?.steam_button_script_exists}
+            onChange={(enabled: boolean) => void runAction(() => setConfig({ REMOTE_PLAY_SUPPRESS_CEC: enabled ? "1" : "0" }))}
+          />
+        </PanelSectionRow>
+        <PanelSectionRow>
+          <ToggleField
             label="SteamOS Start Wakes TV"
             description="Wake the TV/AVR and select this input when SteamOS starts"
             checked={!!bootWake?.is_enabled}
@@ -724,7 +734,7 @@ function Content() {
         <PanelSectionRow>
           <ToggleField
             label="Gamescope Recovery"
-            description="Restart Gamescope after CEC input activation if the display gets stuck"
+            description="Restart Gamescope for a stuck display; ends running games and streams"
             checked={!!gamescopeRecovery?.is_enabled}
             disabled={busy || !status?.gamescope_recovery_script_exists}
             onChange={(enabled: boolean) => void runAction(() => setService("gamescope-recovery", enabled))}

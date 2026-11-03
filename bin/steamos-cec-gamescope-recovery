@@ -31,6 +31,8 @@ TV_POWER_TIMEOUT_SECONDS = 2.0
 RUNTIME_DIR = Path(os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}"))
 COOLDOWN_FILE = RUNTIME_DIR / "steamos-cec-gamescope-recovery.last"
 CEC_ACTIVATION_MARKER = RUNTIME_DIR / "steamos-cec-activation-requested"
+REMOTE_PLAY_MARKER = RUNTIME_DIR / "steamos-cec-remote-play-active"
+REMOTE_PLAY_MARKER_MAX_AGE_SECONDS = 5.0
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 LOG = logging.getLogger("steamos-cec-gamescope-recovery")
@@ -51,7 +53,16 @@ def read_config(path: str = DEFAULT_CONFIG) -> dict[str, str]:
     return config
 
 
-CONFIG = read_config(os.environ.get("STEAMOS_CEC_CONFIG", DEFAULT_CONFIG))
+SYSTEM_CONFIG = read_config(os.environ.get("STEAMOS_CEC_CONFIG", DEFAULT_CONFIG))
+STEAMOS_CEC_USER = SYSTEM_CONFIG.get("STEAMOS_CEC_USER", "deck")
+USER_CONFIG = f"/home/{STEAMOS_CEC_USER}/.config/steamos-cec-toolkit/config.conf"
+CONFIG = {**SYSTEM_CONFIG, **read_config(USER_CONFIG)}
+REMOTE_PLAY_SUPPRESS_CEC = CONFIG.get("REMOTE_PLAY_SUPPRESS_CEC", "0") in {
+    "1",
+    "true",
+    "True",
+    "yes",
+}
 CONNECTOR_STATUS = Path(
     CONFIG.get("GAMESCOPE_CONNECTOR_STATUS", "/sys/class/drm/card0-DP-1/status")
 )
@@ -109,6 +120,15 @@ def mark_recovery_requested() -> None:
         LOG.warning("Cannot write recovery cooldown state: %s", error)
 
 
+def remote_play_is_active() -> bool:
+    if not REMOTE_PLAY_SUPPRESS_CEC:
+        return False
+    try:
+        return time.time() - REMOTE_PLAY_MARKER.stat().st_mtime <= REMOTE_PLAY_MARKER_MAX_AGE_SECONDS
+    except OSError:
+        return False
+
+
 async def command(*args: str) -> tuple[int, str]:
     process = await asyncio.create_subprocess_exec(
         *args,
@@ -128,6 +148,10 @@ async def command_with_timeout(timeout: float, *args: str) -> tuple[int, str]:
 
 async def recover_gamescope(reason: str, delay: float) -> None:
     await asyncio.sleep(delay)
+
+    if remote_play_is_active():
+        LOG.info("Recovery suppressed while Steam Remote Play is active (%s)", reason)
+        return
 
     if CONNECTOR_STATUS.exists() and CONNECTOR_STATUS.read_text().strip() != "connected":
         LOG.warning("%s is not connected; skipping Gamescope recovery", CONNECTOR_STATUS)
@@ -152,6 +176,10 @@ async def recover_gamescope(reason: str, delay: float) -> None:
 
 
 def schedule_recovery(state: dict[str, object], reason: str) -> None:
+    if remote_play_is_active():
+        LOG.info("Recovery suppressed while Steam Remote Play is active (%s)", reason)
+        return
+
     now = time.monotonic()
     last_recovery = float(state.get("last_recovery", 0.0))
     remaining = cooldown_remaining()

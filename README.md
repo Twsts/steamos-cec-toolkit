@@ -648,6 +648,16 @@ On a working CEC topology this is the same behavior users expect from a console:
 press the controller button, the display wakes, the AVR/TV selects the SteamOS
 input, and Game Mode appears.
 
+### Remote Play Protection
+
+Enable **Remote Play Protection** in the Decky plugin to prevent toolkit CEC
+wake and Gamescope Recovery from interrupting a stream from this PC. The
+toolkit follows Steam's local Remote Play session log and suppresses its
+automatic CEC activation only while a stream is active. Physical controller
+input switching resumes when Steam records that the stream has stopped. CEC
+volume and manual Decky actions are unaffected. SteamOS' built-in CEC behavior
+can still act independently of the toolkit.
+
 ## Boot Wake and Input Switching
 
 The optional `steamos-cec-boot-wake` service runs once when the SteamOS user
@@ -777,6 +787,11 @@ This watches the `Active` property from `cecd`. When this source becomes active,
 it can restart `gamescope-session.target` after a short delay. This is useful on
 some HTPC setups where switching back to the SteamOS input leaves Game Mode in a
 bad display state.
+
+Gamescope recovery restarts the active Game Mode session, so it can end a
+running game or Remote Play stream. Enable it only when the display chain needs
+this recovery behavior. Remote Play Protection suppresses recovery while Steam
+records an active stream.
 
 When enabled, recovery is also cooldown-protected after system resume, after the
 configured DRM connector reconnects while CEC reports this source as active, and
